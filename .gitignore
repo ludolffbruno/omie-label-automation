@@ -1,0 +1,113 @@
+# =============================================================
+#  Omie Label Automation — .gitignore
+# =============================================================
+
+# ---- Credenciais e segredos (NUNCA versionar!) ----
+.env
+*.env
+*.key
+*.secret
+
+# ---- Configuração local da aplicação ----
+config.json
+
+# ---- Banco de dados local ----
+*.db
+*.sqlite
+*.sqlite3
+
+# ---- Etiquetas ZPL geradas (simulação) ----
+temp_labels/
+
+# ---- Logs ----
+logs/
+*.log
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# ---- Ambientes virtuais ----
+.venv/
+venv/
+env/
+ENV/
+.env.bak
+
+# ---- Distribuição e empacotamento ----
+build/
+dist/
+*.egg-info/
+*.egg
+MANIFEST
+.eggs/
+wheels/
+
+# ---- pytest e cobertura ----
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.coveragerc
+nosetests.xml
+test-results/
+
+# ---- Mypy / type checkers ----
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# ---- IDEs ----
+# VS Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ---- Sistema Operacional ----
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# ---- Compilados C/extensões nativas ----
+*.so
+*.dll
+*.dylib
+
+# ---- Arquivos temporários ----
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo

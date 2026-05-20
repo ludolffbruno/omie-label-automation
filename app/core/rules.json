@@ -1,0 +1,66 @@
+{
+    "CLARO": {
+        "template": "claro_dividida",
+        "mappings": {
+            "oc": {
+                "source": "observacoes",
+                "regex": "(?:OC|PEDIDO COMPRA|ORDEM DE COMPRA):?\\s*([A-Za-z0-9\\-]+)"
+            },
+            "requisitante": {
+                "source": "observacoes",
+                "regex": "(?:A/C|REQUISITANTE|SOLICITANTE):?\\s*([^|\\n;]+)"
+            },
+            "numero_ordem": {
+                "source": "observacoes",
+                "regex": "(?:N[Ooº]\\s*ORDEM|ORDEM):?\\s*([A-Za-z0-9\\-]+)"
+            }
+        }
+    },
+    "GSK": {
+        "template": "gsk",
+        "mappings": {
+            "oc": {
+                "source": "observacoes",
+                "regex": "(?:OC|GSK-OC):?\\s*([A-Za-z0-9\\-]+)"
+            },
+            "requisitante": {
+                "source": "observacoes",
+                "regex": "(?:REQUISITANTE|SOLICITANTE):?\\s*([^|\\n;]+)"
+            },
+            "numero_ordem": {
+                "source": "pedido_venda"
+            }
+        }
+    },
+    "GLAXOSMITHKLINE": {
+        "template": "gsk",
+        "mappings": {
+            "oc": {
+                "source": "observacoes",
+                "regex": "(?:OC|GSK-OC):?\\s*([A-Za-z0-9\\-]+)"
+            },
+            "requisitante": {
+                "source": "observacoes",
+                "regex": "(?:REQUISITANTE|SOLICITANTE):?\\s*([^|\\n;]+)"
+            },
+            "numero_ordem": {
+                "source": "pedido_venda"
+            }
+        }
+    },
+    "DEFAULT": {
+        "template": "default",
+        "mappings": {
+            "oc": {
+                "source": "pedido_venda"
+            },
+            "requisitante": {
+                "source": "observacoes",
+                "regex": "(?:A/C|REQUISITANTE):?\\s*([^|\\n;]+)"
+            },
+            "numero_ordem": {
+                "source": "pedido_venda"
+            }
+        }
+    }
+}
