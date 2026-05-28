@@ -2,7 +2,7 @@ import sys
 import os
 from pathlib import Path
 from loguru import logger
-from app.core.config import config
+from app.core.config import BASE_DIR, config
 
 def setup_logger():
     # Clear any default loggers configured by loguru
@@ -11,18 +11,19 @@ def setup_logger():
     # Determine log folder and path from settings
     log_dir = Path(config.log_dir)
     if not log_dir.is_absolute():
-        log_dir = Path(__file__).resolve().parent.parent.parent / log_dir
+        log_dir = BASE_DIR / log_dir
         
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "omie_automation.log"
 
-    # Configure stdout sink with colored outputs
-    logger.add(
-        sys.stderr,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-        level=os.getenv("LOG_LEVEL", "INFO"),
-        colorize=True
-    )
+    # In --windowed PyInstaller builds, sys.stderr can be None.
+    if sys.stderr is not None:
+        logger.add(
+            sys.stderr,
+            format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+            level=os.getenv("LOG_LEVEL", "INFO"),
+            colorize=True
+        )
 
     # Configure rotating file sink. On Windows, antivirus/indexers or another
     # process can briefly lock the file; keep the application usable.
