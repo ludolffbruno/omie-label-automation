@@ -8,12 +8,16 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org)
 [![PySide6](https://img.shields.io/badge/UI-PySide6-41CD52?style=flat-square&logo=qt&logoColor=white)](https://doc.qt.io/qtforpython-6/)
+[![HTML](https://img.shields.io/badge/Preview-HTML5-E34F26?style=flat-square&logo=html5&logoColor=white)](https://developer.mozilla.org/docs/Web/HTML)
+[![CSS](https://img.shields.io/badge/Styles-CSS3-1572B6?style=flat-square&logo=css3&logoColor=white)](https://developer.mozilla.org/docs/Web/CSS)
 [![SQLite](https://img.shields.io/badge/Cache-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org)
+[![PyInstaller](https://img.shields.io/badge/Build-PyInstaller-6B7280?style=flat-square)](https://pyinstaller.org)
+[![pytest](https://img.shields.io/badge/Tests-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)](https://pytest.org)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=flat-square&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
 [![Honeywell](https://img.shields.io/badge/Printer-PC42t_DP-f59e0b?style=flat-square)](https://sps.honeywell.com)
 [![Omie](https://img.shields.io/badge/API-Omie-0891d1?style=flat-square)](https://developer.omie.com.br/)
 
-[Funcionalidades](#-funcionalidades) · [Stack](#-stack-técnica) · [Como Rodar](#-como-rodar) · [Gerar EXE](#-gerar-exe) · [Segurança](#-segurança)
+[Funcionalidades](#-funcionalidades) · [Stack](#-stack-técnica) · [Como Rodar](#-como-rodar) · [Gerar EXE](#-gerar-exe)
 
 </div>
 
@@ -42,6 +46,8 @@
 |---|---|
 | **Linguagem** | Python 3.10+ |
 | **Interface** | PySide6 |
+| **Preview** | HTML |
+| **Estilo** | Qt Stylesheets + CSS inline para preview |
 | **API** | Omie JSON-RPC |
 | **HTTP** | httpx + retry/backoff |
 | **PDF/DANFE** | pypdf |
@@ -55,24 +61,9 @@
 
 ## 🔒 Segurança
 
-- `.env` nunca deve ser versionado.
-- `config.json`, bancos `.db`, logs e etiquetas temporárias estão no `.gitignore`.
-- DANFEs/PDFs/modelos locais de cliente também ficam fora do Git.
-- O `.exe` lê `.env`, `config.json`, banco e logs ao lado do executável.
-- As credenciais Omie devem existir apenas no computador de execução.
-
-Arquivos sensíveis ignorados:
-
-```text
-.env
-config.json
-*.db
-logs/
-temp_labels/
-Modelo nota fiscal/
-modelo notafiscal*
-*.pdf
-```
+- Credenciais Omie ficam somente no `.env` local.
+- Banco, logs, DANFEs, PDFs e arquivos temporários não são versionados.
+- No build `.exe`, dados locais ficam ao lado do executável.
 
 ---
 
@@ -235,35 +226,11 @@ Resultado atual validado:
 
 ---
 
-## 🚀 Publicação no GitHub
-
-Instale e autentique o GitHub CLI:
-
-```powershell
-winget install --id GitHub.cli -e --accept-package-agreements --accept-source-agreements
-gh auth login
-gh auth status
-```
-
-Criar repositório privado:
-
-```powershell
-gh repo create ludolffbruno/omie-label-automation --private --source . --remote origin --push
-```
-
-Criar repositório público:
-
-```powershell
-gh repo create ludolffbruno/omie-label-automation --public --source . --remote origin --push
-```
-
----
-
 ## 👤 Autor
 
 <div align="center">
 
-**Bruno Ludolff** · MrLudolff
+· **MrLudolff**
 
 [![GitHub](https://img.shields.io/badge/GitHub-ludolffbruno-181717?style=flat-square&logo=github)](https://github.com/ludolffbruno)
 
