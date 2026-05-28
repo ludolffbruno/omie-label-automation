@@ -22,7 +22,8 @@
                 "source": "observacoes",
                 "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bPEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
             }
-        }
+        },
+        "sort_order": 20
     },
     "TELMEX": {
         "name": "Claro Dividida",
@@ -47,7 +48,8 @@
                 "source": "observacoes",
                 "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bPEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
             }
-        }
+        },
+        "sort_order": 30
     },
     "GSK": {
         "name": "GSK",
@@ -72,11 +74,13 @@
                 "source": "observacoes",
                 "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b|\\bPEDIDO\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
             }
-        }
+        },
+        "sort_order": 50
     },
     "GLAXOSMITHKLINE": {
-        "name": "GlaxoSmithKline",
+        "name": "GLAXOSMITHKLINE",
         "template": "gsk",
+        "label_note": "",
         "conditions": [
             {
                 "field": "cliente",
@@ -84,6 +88,9 @@
                 "value": "GLAXOSMITHKLINE"
             }
         ],
+        "overrides": {
+            "cliente_nome": "GLAXOSMITHKLINE"
+        },
         "mappings": {
             "oc": {
                 "source": "observacoes",
@@ -115,7 +122,8 @@
                 "source": "observacoes",
                 "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b|\\bPEDIDO\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
             }
-        }
+        },
+        "sort_order": 60
     },
     "AMSPEC": {
         "name": "AMSPEC",
@@ -139,6 +147,94 @@
             "numero_ordem": {
                 "source": "observacoes",
                 "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b|\\bPEDIDO\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
+            }
+        },
+        "sort_order": 10
+    },
+    "ONS": {
+        "name": "ONS",
+        "template": "default",
+        "label_note": "",
+        "conditions": [
+            {
+                "field": "cliente",
+                "operator": "contains",
+                "value": "ONS"
+            }
+        ],
+        "overrides": {
+            "cliente_nome": "ONS"
+        },
+        "mappings": {
+            "oc": {
+                "source": "observacoes",
+                "regex": "\\b(?:OC|O/C|ORDEM\\s+DE\\s+COMPRA|PEDIDO\\s+DE\\s+COMPRA|PEDIDO\\s+COMPRA|PEDIDO)\\b\\s*[:=/\\-\\s]?\\s*([A-Za-z0-9][A-Za-z0-9./\\-]*)"
+            },
+            "requisitante": {
+                "source": "observacoes",
+                "regex": "(?:\\bA/C\\b|\\bAC\\s+DE\\b|\\bAOS\\s+CUIDADOS\\s+DE\\b|\\bREQUISITANTE\\b|\\bSOLICITANTE\\b)\\s*[:\\-\\s]?\\s*([^|\\n;]+)"
+            },
+            "numero_ordem": {
+                "source": "observacoes",
+                "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\s+DE\\s+COMPRA\\b|\\bPEDIDO\\s+DE\\s+COMPRA\\b|\\bPEDIDO\\s+COMPRA\\b|\\bPEDIDO\\b)\\s*[:=/\\-\\s]?\\s*([A-Za-z0-9][A-Za-z0-9./\\-]*)"
+            }
+        }
+    },
+    "CONDOMINIO DO EDIFICIO VISCONDE DE INHAUMA CORPORATE": {
+        "name": "COND. EDI. VISCONDE DE INHAUMA",
+        "template": "default",
+        "label_note": "",
+        "conditions": [
+            {
+                "field": "cliente",
+                "operator": "contains",
+                "value": "CONDOMINIO DO EDIFICIO VISCONDE DE INHAUMA CORPORATE"
+            }
+        ],
+        "overrides": {
+            "cliente_nome": "COND. EDI. VISCONDE DE INHAUMA"
+        },
+        "mappings": {
+            "oc": {
+                "source": "observacoes",
+                "regex": "\\b(?:OC|O/C|ORDEM\\s+DE\\s+COMPRA|PEDIDO\\s+DE\\s+COMPRA|PEDIDO\\s+COMPRA|PEDIDO)\\b\\s*[:=/\\-\\s]?\\s*([A-Za-z0-9][A-Za-z0-9./\\-]*)"
+            },
+            "requisitante": {
+                "source": "observacoes",
+                "regex": "(?:\\bA/C\\b|\\bAC\\s+DE\\b|\\bAOS\\s+CUIDADOS\\s+DE\\b|\\bREQUISITANTE\\b|\\bSOLICITANTE\\b)\\s*[:\\-\\s]?\\s*([^|\\n;]+)"
+            },
+            "numero_ordem": {
+                "source": "observacoes",
+                "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\s+DE\\s+COMPRA\\b|\\bPEDIDO\\s+DE\\s+COMPRA\\b|\\bPEDIDO\\s+COMPRA\\b|\\bPEDIDO\\b)\\s*[:=/\\-\\s]?\\s*([A-Za-z0-9][A-Za-z0-9./\\-]*)"
+            }
+        }
+    },
+    "TELMEX DO BRASIL LTDA": {
+        "name": "CLARO",
+        "template": "claro_dividida",
+        "label_note": "",
+        "conditions": [
+            {
+                "field": "cliente",
+                "operator": "contains",
+                "value": "TELMEX DO BRASIL LTDA"
+            }
+        ],
+        "overrides": {
+            "cliente_nome": "CLARO"
+        },
+        "mappings": {
+            "oc": {
+                "source": "observacoes",
+                "regex": "\\b(?:OC|O/C|ORDEM\\s+DE\\s+COMPRA|PEDIDO\\s+DE\\s+COMPRA|PEDIDO\\s+COMPRA|PEDIDO)\\b\\s*[:=/\\-\\s]?\\s*([A-Za-z0-9][A-Za-z0-9./\\-]*)"
+            },
+            "requisitante": {
+                "source": "observacoes",
+                "regex": "(?:\\bA/C\\b|\\bAC\\s+DE\\b|\\bAOS\\s+CUIDADOS\\s+DE\\b|\\bREQUISITANTE\\b|\\bSOLICITANTE\\b)\\s*[:\\-\\s]?\\s*([^|\\n;]+)"
+            },
+            "numero_ordem": {
+                "source": "observacoes",
+                "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\s+DE\\s+COMPRA\\b|\\bPEDIDO\\s+DE\\s+COMPRA\\b|\\bPEDIDO\\s+COMPRA\\b|\\bPEDIDO\\b)\\s*[:=/\\-\\s]?\\s*([A-Za-z0-9][A-Za-z0-9./\\-]*)"
             }
         }
     }

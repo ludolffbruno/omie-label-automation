@@ -309,6 +309,7 @@ def test_friendly_model_conditions_match_without_exposing_regex(omie_client):
     omie_client.rules["CLIENTE RJ"] = {
         "name": "Cliente RJ",
         "template": "gsk",
+        "label_note": "CONFERIR NO RECEBIMENTO",
         "conditions": [
             {"field": "uf", "operator": "equals", "value": "RJ"}
         ],
@@ -335,6 +336,38 @@ def test_friendly_model_conditions_match_without_exposing_regex(omie_client):
     normalized = omie_client.normalize_invoice(raw_nfe)
 
     assert normalized.template_name == "gsk"
+    assert normalized.model_name == "Cliente RJ"
+    assert normalized.label_note == "CONFERIR NO RECEBIMENTO"
+
+
+def test_apply_rules_to_cached_invoice_updates_template_and_note(omie_client):
+    omie_client.rules["ONS"] = {
+        "name": "ONS",
+        "template": "gsk",
+        "label_note": "OBS ONS",
+        "conditions": [
+            {"field": "cliente", "operator": "contains", "value": "ONS"}
+        ],
+        "mappings": {}
+    }
+    inv = NormalizedInvoice(
+        id_nfe=20386,
+        numero_nf="00050386",
+        chave_nfe="35260500000000000000550010000503861000000000",
+        cliente_nome="OPERADOR NACIONAL DO SISTEMA ELETRICO ONS",
+        cliente_cnpj_cpf="00.000.000/0001-00",
+        cliente_uf="RJ",
+        quantidade_volumes=1,
+        status="APROVADA",
+        data_emissao="21/05/2026",
+        template_name="default",
+    )
+
+    refreshed = omie_client.apply_rules_to_invoice(inv)
+
+    assert refreshed.template_name == "gsk"
+    assert refreshed.model_name == "ONS"
+    assert refreshed.label_note == "OBS ONS"
 
 
 def test_normalize_invoice_telmex_uses_claro_template_and_requester(omie_client):

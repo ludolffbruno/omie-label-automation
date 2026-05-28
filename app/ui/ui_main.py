@@ -15,9 +15,9 @@ from PySide6.QtWidgets import (
     QHeaderView, QStatusBar, QMessageBox, QApplication,
     QLineEdit, QDateEdit, QDialog, QScrollArea, QAbstractItemView,
     QProgressBar,
-    QFormLayout, QFileDialog
+    QFormLayout, QFileDialog, QListWidget, QListWidgetItem, QAbstractSpinBox
 )
-from PySide6.QtCore import Qt, QTimer, Slot, QDate
+from PySide6.QtCore import Qt, QTimer, Slot, QDate, QEvent
 from PySide6.QtGui import QColor, QTextCursor
 
 from app.core.config import config
@@ -33,6 +33,18 @@ TABLE_COLUMNS = [
     "Nº NF-e", "Cliente", "UF", "Pedido", "Protocolo", "Vol.",
     "Template", "Data Emissão", "Status", "Ações"
 ]
+TABLE_MIN_WIDTHS = {
+    "Nº NF-e": 70,
+    "Cliente": 140,
+    "UF": 40,
+    "Pedido": 75,
+    "Protocolo": 85,
+    "Vol.": 45,
+    "Template": 80,
+    "Data Emissão": 90,
+    "Status": 80,
+    "Ações": 60,
+}
 
 # Cores de status para destaque visual
 STATUS_COLORS = {
@@ -60,6 +72,20 @@ def _invoice_protocolo_value(inv: NormalizedInvoice) -> str:
     return inv.protocolo if _is_claro_invoice(inv) and inv.protocolo else "XXXXX"
 
 
+def _invoice_template_display(inv: NormalizedInvoice) -> str:
+    value = inv.model_name or inv.template_name or "default"
+    return f"{value} *" if inv.label_note else value
+
+
+def _invoice_template_tooltip(inv: NormalizedInvoice) -> str:
+    lines = [f"Layout: {inv.template_name or 'default'}"]
+    if inv.model_name:
+        lines.append(f"Modelo: {inv.model_name}")
+    if inv.label_note:
+        lines.append(f"Observação: {inv.label_note}")
+    return "\n".join(lines)
+
+
 class InvoiceEditDialog(QDialog):
     """Edita os campos da etiqueta selecionada sem alterar o padrão do cliente."""
 
@@ -68,7 +94,7 @@ class InvoiceEditDialog(QDialog):
         self.invoice = invoice
         self.updated_invoice = invoice
         self.setWindowTitle(f"Editar Etiqueta - NF-e {invoice.numero_nf}")
-        self.resize(420, 360)
+        self.resize(450, 430)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -81,9 +107,30 @@ class InvoiceEditDialog(QDialog):
         self.txt_ordem = QLineEdit(_invoice_pedido_value(invoice) if _invoice_pedido_value(invoice) != "XXXXX" else "")
         self.txt_req = QLineEdit(CLARO_REQUISITANTE if _is_claro_invoice(invoice) else (invoice.requisitante or ""))
         self.txt_prot = QLineEdit(invoice.protocolo or "")
+        self.txt_note = QTextEdit(invoice.label_note or "")
+        self.txt_note.setFixedHeight(70)
+        self.txt_note.setPlaceholderText("Observações impressas na etiqueta padrão")
         self.spn_vols = QSpinBox()
         self.spn_vols.setRange(1, 999)
+        self.spn_vols.setSingleStep(1)
+        self.spn_vols.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        self.spn_vols.setKeyboardTracking(False)
         self.spn_vols.setValue(invoice.quantidade_volumes or 1)
+        vol_box = QWidget()
+        vol_layout = QHBoxLayout(vol_box)
+        vol_layout.setContentsMargins(0, 0, 0, 0)
+        vol_layout.setSpacing(4)
+        vol_layout.addWidget(self.spn_vols, stretch=1)
+        btn_vol_down = QPushButton("-")
+        btn_vol_up = QPushButton("+")
+        btn_vol_down.setFixedWidth(28)
+        btn_vol_up.setFixedWidth(28)
+        btn_vol_down.setToolTip("Diminuir volumes")
+        btn_vol_up.setToolTip("Aumentar volumes")
+        btn_vol_down.clicked.connect(lambda: self.spn_vols.stepDown())
+        btn_vol_up.clicked.connect(lambda: self.spn_vols.stepUp())
+        vol_layout.addWidget(btn_vol_down)
+        vol_layout.addWidget(btn_vol_up)
         self.cmb_template = QComboBox()
         self.cmb_template.addItem("Padrao 110x70", "default")
         self.cmb_template.addItem("Claro dividida", "claro_dividida")
@@ -98,7 +145,8 @@ class InvoiceEditDialog(QDialog):
         form.addRow(order_label, self.txt_ordem)
         form.addRow("Requisitante:", self.txt_req)
         form.addRow("Protocolo:", self.txt_prot)
-        form.addRow("Volumes:", self.spn_vols)
+        form.addRow("Observações:", self.txt_note)
+        form.addRow("Volumes:", vol_box)
         form.addRow("Template:", self.cmb_template)
         layout.addLayout(form)
 
@@ -121,6 +169,7 @@ class InvoiceEditDialog(QDialog):
             "oc": self.txt_ordem.text().strip() or None,
             "requisitante": self.txt_req.text().strip() or None,
             "protocolo": self.txt_prot.text().strip() or None,
+            "label_note": self.txt_note.toPlainText().strip() or None,
             "quantidade_volumes": self.spn_vols.value(),
             "template_name": self.cmb_template.currentData(),
         }
@@ -141,6 +190,9 @@ class MainWindow(QMainWindow):
         self._pending_restart = False
         self._stopping_worker = False
         self._is_fetching = False
+        self._refreshing_printers = False
+        self._loading_table_widths = False
+        self._fitting_table_widths = False
 
         self._setup_window()
         self._build_ui()
@@ -233,13 +285,8 @@ class MainWindow(QMainWindow):
         self._cmb_printer.setMinimumWidth(280)
         self._cmb_printer.setToolTip("Selecione a Honeywell PC42t ou modo SIMULADO")
         self._refresh_printer_list()
+        self._cmb_printer.currentTextChanged.connect(self._on_printer_changed)
         layout.addWidget(self._cmb_printer)
-
-        btn_reload_printers = QPushButton("Atualizar")
-        btn_reload_printers.setToolTip("Recarregar lista de impressoras do sistema")
-        btn_reload_printers.setFixedWidth(80)
-        btn_reload_printers.clicked.connect(self._refresh_printer_list)
-        layout.addWidget(btn_reload_printers)
 
         layout.addSpacing(12)
 
@@ -328,19 +375,89 @@ class MainWindow(QMainWindow):
         self._table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self._table.setEditTriggers(QTableWidget.NoEditTriggers)
         self._table.setShowGrid(False)
+        self._table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._table.verticalHeader().setVisible(False)
-        self._table.horizontalHeader().setStretchLastSection(False)
-        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        header = self._table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setSectionsMovable(False)
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.sectionResized.connect(self._save_table_column_widths)
+        self._table.viewport().installEventFilter(self)
         self._table.setMinimumHeight(200)
 
-        # Larguras fixas para algumas colunas
+        # Larguras iniciais; depois o config.json prevalece.
         col_widths = [90, -1, 50, 115, 120, 55, 100, 115, 90, 55]
         for i, w in enumerate(col_widths):
             if w > 0:
                 self._table.setColumnWidth(i, w)
+        self._restore_table_column_widths()
+        QTimer.singleShot(0, self._fit_table_columns_to_viewport)
 
         layout.addWidget(self._table)
         return group
+
+    def _restore_table_column_widths(self):
+        saved = getattr(config, "table_column_widths", {}) or {}
+        if not isinstance(saved, dict):
+            return
+        self._loading_table_widths = True
+        try:
+            for name, width in saved.items():
+                if name in TABLE_COLUMNS:
+                    self._table.setColumnWidth(TABLE_COLUMNS.index(name), max(35, int(width)))
+        finally:
+            self._loading_table_widths = False
+
+    @Slot(int, int, int)
+    def _save_table_column_widths(self, *_):
+        if self._loading_table_widths or self._fitting_table_widths:
+            return
+        QTimer.singleShot(0, self._fit_and_save_table_column_widths)
+
+    def _fit_and_save_table_column_widths(self):
+        self._fit_table_columns_to_viewport()
+        widths = {
+            name: self._table.columnWidth(index)
+            for index, name in enumerate(TABLE_COLUMNS)
+        }
+        config.update_settings(table_column_widths=widths)
+
+    def _fit_table_columns_to_viewport(self):
+        if not hasattr(self, "_table"):
+            return
+        viewport_width = max(0, self._table.viewport().width() - 2)
+        total = sum(self._table.columnWidth(i) for i in range(self._table.columnCount()))
+        gap = viewport_width - total
+        if abs(gap) <= 2:
+            self._table.horizontalScrollBar().setValue(0)
+            return
+        cliente_col = TABLE_COLUMNS.index("Cliente")
+        self._fitting_table_widths = True
+        try:
+            if gap > 0:
+                self._table.setColumnWidth(cliente_col, self._table.columnWidth(cliente_col) + gap)
+            else:
+                remaining = -gap
+                for name in ["Cliente", "Template", "Pedido", "Protocolo", "Data Emissão", "Nº NF-e"]:
+                    col = TABLE_COLUMNS.index(name)
+                    current = self._table.columnWidth(col)
+                    minimum = TABLE_MIN_WIDTHS[name]
+                    reducible = max(0, current - minimum)
+                    if reducible <= 0:
+                        continue
+                    reduce_by = min(reducible, remaining)
+                    self._table.setColumnWidth(col, current - reduce_by)
+                    remaining -= reduce_by
+                    if remaining <= 0:
+                        break
+            self._table.horizontalScrollBar().setValue(0)
+        finally:
+            self._fitting_table_widths = False
+
+    def eventFilter(self, obj, event):
+        if hasattr(self, "_table") and obj is self._table.viewport() and event.type() == QEvent.Resize:
+            QTimer.singleShot(0, self._fit_table_columns_to_viewport)
+        return super().eventFilter(obj, event)
 
     def _build_log_panel(self) -> QGroupBox:
         group = QGroupBox("Console de Logs em Tempo Real")
@@ -580,9 +697,77 @@ class MainWindow(QMainWindow):
             return
 
         updated = dialog.updated_invoice
+        updated = self._maybe_save_model_from_edit(invoices[0], updated)
         self._invoice_map[updated.id_nfe] = updated
         self._update_invoice_row_values(updated)
         self._append_log(f"Etiqueta da NF-e {ZPLGenerator._format_nf(updated.numero_nf)} editada para esta sessao.", "INFO")
+
+    def _maybe_save_model_from_edit(self, original: NormalizedInvoice, updated: NormalizedInvoice) -> NormalizedInvoice:
+        stable_changed = any([
+            (original.cliente_nome or "") != (updated.cliente_nome or ""),
+            (original.requisitante or "") != (updated.requisitante or ""),
+            (original.label_note or "") != (updated.label_note or ""),
+            (original.template_name or "default") != (updated.template_name or "default"),
+        ])
+        if not stable_changed:
+            return updated
+
+        answer = QMessageBox.question(
+            self,
+            "Criar modelo?",
+            "Salvar estas alterações como modelo para este cliente nas próximas NF-e?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return updated
+
+        source_client = (original.cliente_nome or updated.cliente_nome or "").strip()
+        if not source_client:
+            QMessageBox.warning(self, "Modelo", "Cliente vazio. Modelo nao criado.")
+            return updated
+
+        try:
+            rules_path = Path(__file__).resolve().parent.parent / "core" / "rules.json"
+            with open(rules_path, "r", encoding="utf-8") as f:
+                rules = json.load(f)
+
+            edited_client = (updated.cliente_nome or "").strip()
+            condition_value = edited_client if edited_client and edited_client.upper() in source_client.upper() else source_client
+            key = condition_value.upper()
+            old_rule = rules.get(key, {})
+            overrides = dict(old_rule.get("overrides") or {})
+            if updated.cliente_nome and updated.cliente_nome != original.cliente_nome:
+                overrides["cliente_nome"] = updated.cliente_nome
+            if updated.requisitante and updated.requisitante != original.requisitante:
+                overrides["requisitante"] = updated.requisitante
+
+            rules[key] = {
+                "name": updated.cliente_nome or old_rule.get("name") or source_client,
+                "template": updated.template_name or "default",
+                "label_note": updated.label_note or "",
+                "conditions": [{
+                    "field": "cliente",
+                    "operator": "contains",
+                    "value": condition_value,
+                }],
+                "overrides": overrides,
+                "mappings": old_rule.get("mappings") or self._default_model_mappings(),
+            }
+            with open(rules_path, "w", encoding="utf-8") as f:
+                json.dump(rules, f, indent=4, ensure_ascii=False)
+
+            refreshed = updated.model_copy(update={
+                "model_name": rules[key]["name"],
+                "template_name": rules[key]["template"],
+                "label_note": rules[key].get("label_note") or None,
+            })
+            self.db.save_invoice_cache(refreshed)
+            self._append_log(f"Modelo criado/atualizado para cliente: {condition_value}.", "INFO")
+            return refreshed
+        except Exception as e:
+            QMessageBox.critical(self, "Erro ao salvar modelo", str(e))
+            return updated
 
     @Slot()
     def _print_selected(self):
@@ -633,19 +818,50 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _refresh_printer_list(self):
+        self._refreshing_printers = True
         current = self._cmb_printer.currentText()
         self._cmb_printer.clear()
         printers = PrinterService.list_printers()
         for p in printers:
             self._cmb_printer.addItem(p)
-        # Tenta restaurar a seleção anterior
-        idx = self._cmb_printer.findText(current)
+        selected = self._preferred_printer(printers, current)
+        idx = self._cmb_printer.findText(selected) if selected else -1
         if idx >= 0:
             self._cmb_printer.setCurrentIndex(idx)
-        elif config.printer_name:
-            idx2 = self._cmb_printer.findText(config.printer_name)
-            if idx2 >= 0:
-                self._cmb_printer.setCurrentIndex(idx2)
+            config.update_settings(printer_name=selected)
+        self._refreshing_printers = False
+
+    @staticmethod
+    def _preferred_printer(printers: list[str], current: str = "") -> str:
+        if not printers:
+            return ""
+
+        def is_honeywell(name: str) -> bool:
+            normalized = name.upper()
+            return "HONEYWELL" in normalized or "PC42" in normalized
+
+        def find_exact(name: str) -> str:
+            return next((p for p in printers if p == name), "")
+
+        if current and is_honeywell(current) and find_exact(current):
+            return current
+        for printer in printers:
+            if is_honeywell(printer):
+                return printer
+        if config.printer_name and find_exact(config.printer_name):
+            return config.printer_name
+        for printer in printers:
+            normalized = printer.upper()
+            if "ONENOTE" not in normalized and "SIMULADO" not in normalized:
+                return printer
+        return printers[0]
+
+    @Slot(str)
+    def _on_printer_changed(self, printer: str):
+        if self._refreshing_printers or not printer:
+            return
+        config.update_settings(printer_name=printer)
+        self._status_bar.showMessage(f"Impressora selecionada: {printer}")
 
     @Slot(int)
     def _on_interval_changed(self, value: int):
@@ -880,7 +1096,7 @@ class MainWindow(QMainWindow):
             _invoice_pedido_value(inv),
             _invoice_protocolo_value(inv),
             str(inv.quantidade_volumes),
-            inv.template_name or "default",
+            _invoice_template_display(inv),
             inv.data_emissao or "",
             status,
             "",
@@ -889,6 +1105,8 @@ class MainWindow(QMainWindow):
         for col, val in enumerate(values):
             item = QTableWidgetItem(val)
             item.setTextAlignment(Qt.AlignCenter)
+            if TABLE_COLUMNS[col] == "Template":
+                item.setToolTip(_invoice_template_tooltip(inv))
             self._table.setItem(row, col, item)
 
         btn_download = QPushButton("Baixar")
@@ -920,7 +1138,7 @@ class MainWindow(QMainWindow):
                 "Pedido": _invoice_pedido_value(inv),
                 "Protocolo": _invoice_protocolo_value(inv),
                 "Vol.": str(inv.quantidade_volumes),
-                "Template": inv.template_name or "default",
+                "Template": _invoice_template_display(inv),
                 "Data Emissão": inv.data_emissao or "",
             }
             for column_name, value in values.items():
@@ -928,6 +1146,8 @@ class MainWindow(QMainWindow):
                 item = self._table.item(row, col)
                 if item:
                     item.setText(value)
+                    if column_name == "Template":
+                        item.setToolTip(_invoice_template_tooltip(inv))
             break
 
     def _selected_invoices(self) -> list[NormalizedInvoice]:
@@ -972,8 +1192,10 @@ class MainWindow(QMainWindow):
     def _open_model_dialog(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("Modelos Etiquetas")
-        dialog.resize(760, 430)
-        layout = QVBoxLayout(dialog)
+        dialog.resize(820, 500)
+        root = QHBoxLayout(dialog)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(14)
 
         rules_path = Path(__file__).resolve().parent.parent / "core" / "rules.json"
         try:
@@ -982,42 +1204,50 @@ class MainWindow(QMainWindow):
         except Exception:
             rules = {}
 
-        table = QTableWidget()
-        table.setColumnCount(4)
-        table.setHorizontalHeaderLabels(["Modelo", "Campo", "Condição", "Layout"])
-        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        table.setSelectionBehavior(QTableWidget.SelectRows)
-        table.setSelectionMode(QAbstractItemView.SingleSelection)
-        layout.addWidget(table)
+        selected_key: str | None = None
 
-        def refresh_table():
-            table.setRowCount(0)
-            for key, rule in sorted(rules.items()):
-                row = table.rowCount()
-                table.insertRow(row)
-                model_name = rule.get("name") or ("Padrão 110x70" if key == "DEFAULT" else key.title())
-                table.setItem(row, 0, QTableWidgetItem(model_name))
-                conditions = rule.get("conditions") or []
-                if conditions:
-                    condition = conditions[0]
-                    field_label = self._model_field_label(condition.get("field", "cliente"))
-                    operator_label = self._model_operator_label(condition.get("operator", "contains"))
-                    condition_text = f"{operator_label} {condition.get('value', '')}".strip()
-                else:
-                    field_label = "Nome do Cliente"
-                    condition_text = "" if key == "DEFAULT" else f"contém {key}"
-                table.setItem(row, 1, QTableWidgetItem(field_label))
-                table.setItem(row, 2, QTableWidgetItem(condition_text))
-                table.setItem(row, 3, QTableWidgetItem(rule.get("template", "default")))
+        left_panel = QGroupBox("Modelos")
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(10, 12, 10, 10)
+        left_layout.setSpacing(8)
 
-        refresh_table()
+        btn_new = QPushButton("+ Novo Modelo")
+        btn_new.setToolTip("Criar uma nova regra de modelo")
+        left_layout.addWidget(btn_new)
 
-        layout.addWidget(QLabel("Nome do modelo:"))
+        model_list = QListWidget()
+        model_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        model_list.setMinimumWidth(280)
+        left_layout.addWidget(model_list, stretch=1)
+
+        order_actions = QHBoxLayout()
+        btn_up = QPushButton("↑")
+        btn_down = QPushButton("↓")
+        btn_delete = QPushButton("🗑")
+        btn_up.setFixedWidth(34)
+        btn_down.setFixedWidth(34)
+        btn_delete.setFixedWidth(38)
+        btn_up.setToolTip("Mover modelo para cima")
+        btn_down.setToolTip("Mover modelo para baixo")
+        btn_delete.setToolTip("Remover modelo selecionado")
+        order_actions.addWidget(btn_up)
+        order_actions.addWidget(btn_down)
+        order_actions.addStretch()
+        order_actions.addWidget(btn_delete)
+        left_layout.addLayout(order_actions)
+        root.addWidget(left_panel, stretch=1)
+
+        right_panel = QGroupBox("Configuração")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(14, 14, 14, 12)
+        right_layout.setSpacing(10)
+
+        right_layout.addWidget(QLabel("Nome do modelo"))
         txt_name = QLineEdit()
         txt_name.setPlaceholderText("Ex: Modelo Cliente XPTO")
-        layout.addWidget(txt_name)
+        right_layout.addWidget(txt_name)
 
+        right_layout.addWidget(QLabel("Regra de identificação"))
         form = QFormLayout()
         cmb_field = QComboBox()
         cmb_field.addItem("Nome do Cliente", "cliente")
@@ -1033,32 +1263,116 @@ class MainWindow(QMainWindow):
         form.addRow("Campo:", cmb_field)
         form.addRow("Comparação:", cmb_operator)
         form.addRow("Valor:", txt_condition)
-        layout.addLayout(form)
+        right_layout.addLayout(form)
 
-        layout.addWidget(QLabel("Modelo:"))
+        right_layout.addWidget(QLabel("Layout da etiqueta"))
         cmb_template = QComboBox()
         cmb_template.addItem("Padrao 110x70", "default")
         cmb_template.addItem("Claro dividida", "claro_dividida")
-        layout.addWidget(cmb_template)
+        cmb_template.addItem("GSK", "gsk")
+        right_layout.addWidget(cmb_template)
 
-        layout.addWidget(QLabel("Correspondência: use textos simples como Cliente contém Claro, Cidade contém Rio ou UF igual a RJ."))
+        right_layout.addWidget(QLabel("Observação"))
+        txt_note = QTextEdit()
+        txt_note.setFixedHeight(68)
+        txt_note.setPlaceholderText("Observação impressa na etiqueta padrão")
+        right_layout.addWidget(txt_note)
+
+        right_layout.addStretch()
+        actions = QHBoxLayout()
+        btn_default = QPushButton("Tornar Padrão")
+        btn_save = QPushButton("Salvar")
+        btn_cancel = QPushButton("Cancelar")
+        actions.addStretch()
+        actions.addWidget(btn_default)
+        actions.addWidget(btn_save)
+        actions.addWidget(btn_cancel)
+        right_layout.addLayout(actions)
+        root.addWidget(right_panel, stretch=2)
+
+        def model_name_for(key: str, rule: dict) -> str:
+            return rule.get("name") or ("Padrão 110x70" if key == "DEFAULT" else key.title())
+
+        def first_condition_for(key: str, rule: dict) -> dict:
+            conditions = rule.get("conditions") or []
+            if conditions:
+                return conditions[0]
+            return {"field": "cliente", "operator": "contains", "value": "" if key == "DEFAULT" else key}
+
+        def condition_summary(key: str, rule: dict) -> str:
+            condition = first_condition_for(key, rule)
+            field_label = self._model_field_label(condition.get("field", "cliente"))
+            operator_label = self._model_operator_label(condition.get("operator", "contains"))
+            value = str(condition.get("value", "")).strip()
+            return f"{field_label} {operator_label} {value}".strip()
+
+        def ordered_rule_keys() -> list[str]:
+            def order_key(item: tuple[str, dict]):
+                key, rule = item
+                name = model_name_for(key, rule).upper()
+                sort_order = rule.get("sort_order")
+                if isinstance(sort_order, int):
+                    return (0, sort_order, name)
+                return (1, name)
+            return [key for key, _ in sorted(rules.items(), key=order_key)]
+
+        def refresh_list(select_key: str | None = None):
+            model_list.clear()
+            for key in ordered_rule_keys():
+                rule = rules[key]
+                name = model_name_for(key, rule)
+                template = rule.get("template", "default")
+                summary = condition_summary(key, rule)
+                item = QListWidgetItem(f"{name}\n{template} · {summary}")
+                item.setData(Qt.UserRole, key)
+                model_list.addItem(item)
+                if key == select_key:
+                    model_list.setCurrentItem(item)
+            if model_list.currentRow() < 0 and model_list.count() > 0:
+                model_list.setCurrentRow(0)
+            update_default_button()
+
+        def rule_signature(key: str, rule: dict) -> tuple[str, str, str]:
+            condition = first_condition_for(key, rule)
+            return (
+                str(condition.get("field") or "cliente").lower(),
+                str(condition.get("operator") or "contains").lower(),
+                str(condition.get("value") or "").strip().upper(),
+            )
+
+        def same_signature_keys(key: str | None) -> list[str]:
+            if not key or key not in rules:
+                return []
+            signature = rule_signature(key, rules[key])
+            return [candidate for candidate, rule in rules.items() if rule_signature(candidate, rule) == signature]
+
+        def is_default_for_selected() -> bool:
+            if not selected_key or selected_key not in rules:
+                return False
+            group = same_signature_keys(selected_key)
+            return len(group) <= 1 or bool(rules[selected_key].get("default_for_client"))
+
+        def update_default_button():
+            if not selected_key or selected_key not in rules:
+                btn_default.setText("Tornar Padrão")
+                btn_default.setEnabled(False)
+                return
+            if is_default_for_selected():
+                btn_default.setText("Padrão")
+                btn_default.setEnabled(False)
+            else:
+                btn_default.setText("Tornar Padrão")
+                btn_default.setEnabled(True)
 
         def load_selected():
-            indexes = table.selectionModel().selectedRows()
-            if not indexes:
+            nonlocal selected_key
+            item = model_list.currentItem()
+            if not item:
                 return
-            row = indexes[0].row()
-            model_name = table.item(row, 0).text()
-            key = "DEFAULT"
-            for candidate_key, candidate_rule in rules.items():
-                candidate_name = candidate_rule.get("name") or ("Padrão 110x70" if candidate_key == "DEFAULT" else candidate_key.title())
-                if candidate_name == model_name:
-                    key = candidate_key
-                    break
-            rule = rules.get(key, {})
-            conditions = rule.get("conditions") or []
-            condition = conditions[0] if conditions else {"field": "cliente", "operator": "contains", "value": "" if key == "DEFAULT" else key}
-            txt_name.setText(rule.get("name") or table.item(row, 0).text())
+            selected_key = item.data(Qt.UserRole)
+            rule = rules.get(selected_key, {})
+            condition = first_condition_for(selected_key, rule)
+            txt_name.setText(model_name_for(selected_key, rule))
             field_idx = cmb_field.findData(condition.get("field", "cliente"))
             op_idx = cmb_operator.findData(condition.get("operator", "contains"))
             cmb_field.setCurrentIndex(field_idx if field_idx >= 0 else 0)
@@ -1067,46 +1381,144 @@ class MainWindow(QMainWindow):
             idx = cmb_template.findData(rule.get("template", "default"))
             if idx >= 0:
                 cmb_template.setCurrentIndex(idx)
-
-        table.itemSelectionChanged.connect(load_selected)
-
-        actions = QHBoxLayout()
-        btn_new = QPushButton("Novo")
-        btn_save = QPushButton("Salvar")
-        btn_cancel = QPushButton("Cancelar")
-        actions.addStretch()
-        actions.addWidget(btn_new)
-        actions.addWidget(btn_save)
-        actions.addWidget(btn_cancel)
-        layout.addLayout(actions)
+            txt_note.setPlainText(str(rule.get("label_note") or ""))
+            update_default_button()
 
         def clear_form():
+            nonlocal selected_key
+            selected_key = None
             txt_name.clear()
             txt_condition.clear()
+            txt_note.clear()
             cmb_field.setCurrentIndex(0)
             cmb_operator.setCurrentIndex(0)
             cmb_template.setCurrentIndex(0)
-            table.clearSelection()
+            model_list.clearSelection()
+            txt_name.setFocus()
+            update_default_button()
 
         def save_model():
+            nonlocal selected_key
+            condition_value = txt_condition.text().strip()
+            is_default = selected_key == "DEFAULT"
+            if not condition_value and not is_default:
+                QMessageBox.warning(dialog, "Campo obrigatorio", "Informe o valor da condição.")
+                return
+
+            new_key = "DEFAULT" if is_default else condition_value.upper()
             condition = {
                 "field": cmb_field.currentData(),
                 "operator": cmb_operator.currentData(),
-                "value": txt_condition.text(),
+                "value": condition_value,
             }
-            self._save_client_model(dialog, condition, cmb_template.currentData(), txt_name.text(), close_dialog=False)
             try:
-                with open(rules_path, "r", encoding="utf-8") as f:
-                    rules.clear()
-                    rules.update(json.load(f))
-                refresh_table()
-            except Exception:
-                pass
+                old_rule = rules.get(selected_key or new_key, {})
+                if selected_key and selected_key != new_key and selected_key in rules and selected_key != "DEFAULT":
+                    rules.pop(selected_key)
+                rules[new_key] = {
+                    "name": txt_name.text().strip() or ("Padrão 110x70" if new_key == "DEFAULT" else new_key.title()),
+                    "template": cmb_template.currentData(),
+                    "label_note": txt_note.toPlainText().strip(),
+                    "default_for_client": bool(old_rule.get("default_for_client")),
+                    "conditions": [condition],
+                    "mappings": old_rule.get("mappings") or self._default_model_mappings(),
+                }
+                with open(rules_path, "w", encoding="utf-8") as f:
+                    json.dump(rules, f, indent=4, ensure_ascii=False)
+                selected_key = new_key
+                refresh_list(select_key=new_key)
+                self._append_log(f"Modelo salvo: {rules[new_key]['name']} ({rules[new_key]['template']}).", "INFO")
+                self._reapply_models_to_visible_invoices()
+            except Exception as e:
+                QMessageBox.critical(dialog, "Erro ao salvar", str(e))
+
+        def persist_rules():
+            with open(rules_path, "w", encoding="utf-8") as f:
+                json.dump(rules, f, indent=4, ensure_ascii=False)
+
+        def move_selected(delta: int):
+            nonlocal selected_key
+            row = model_list.currentRow()
+            if row < 0:
+                return
+            keys = ordered_rule_keys()
+            target = row + delta
+            if target < 0 or target >= len(keys):
+                return
+            keys[row], keys[target] = keys[target], keys[row]
+            for index, key in enumerate(keys, start=1):
+                rules[key]["sort_order"] = index * 10
+            persist_rules()
+            selected_key = keys[target]
+            refresh_list(select_key=selected_key)
+
+        def make_selected_default():
+            if not selected_key or selected_key not in rules:
+                return
+            for key in same_signature_keys(selected_key):
+                rules[key]["default_for_client"] = key == selected_key
+            persist_rules()
+            refresh_list(select_key=selected_key)
+
+        def delete_selected():
+            nonlocal selected_key
+            if not selected_key or selected_key not in rules:
+                return
+            selected_rule = rules[selected_key]
+            protected_keys = {"DEFAULT", "CLARO", "TELMEX"}
+            is_protected_claro = (
+                selected_rule.get("template") == "claro_dividida"
+                and str(selected_rule.get("name") or "").strip().upper() == "CLARO DIVIDIDA"
+            )
+            if selected_key in protected_keys or is_protected_claro:
+                QMessageBox.information(dialog, "Modelo protegido", "DEFAULT e Claro Dividida nao podem ser removidos.")
+                return
+
+            model_name = model_name_for(selected_key, selected_rule)
+            answer = QMessageBox.question(
+                dialog,
+                "Confirmar exclusao",
+                f"Remover o modelo '{model_name}'?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+
+            old_row = model_list.currentRow()
+            rules.pop(selected_key, None)
+            persist_rules()
+            selected_key = None
+            refresh_list()
+            if model_list.count() > 0:
+                model_list.setCurrentRow(min(old_row, model_list.count() - 1))
+            self._append_log(f"Modelo removido: {model_name}.", "INFO")
+            self._reapply_models_to_visible_invoices()
 
         btn_new.clicked.connect(clear_form)
+        btn_up.clicked.connect(lambda: move_selected(-1))
+        btn_down.clicked.connect(lambda: move_selected(1))
+        btn_delete.clicked.connect(delete_selected)
+        btn_default.clicked.connect(make_selected_default)
         btn_cancel.clicked.connect(dialog.reject)
         btn_save.clicked.connect(save_model)
+        model_list.currentItemChanged.connect(lambda *_: load_selected())
+        refresh_list()
+        load_selected()
         dialog.exec()
+
+    def _reapply_models_to_visible_invoices(self):
+        client = OmieClient()
+        changed = 0
+        for invoice_id, inv in list(self._invoice_map.items()):
+            refreshed = client.apply_rules_to_invoice(inv)
+            if refreshed != inv:
+                self._invoice_map[invoice_id] = refreshed
+                self.db.save_invoice_cache(refreshed)
+                self._update_invoice_row_values(refreshed)
+                changed += 1
+        if changed:
+            self._append_log(f"Modelos reaplicados em {changed} NF-e(s) visiveis.", "INFO")
 
     @staticmethod
     def _model_field_label(field: str) -> str:

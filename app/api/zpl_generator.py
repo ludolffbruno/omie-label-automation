@@ -106,6 +106,7 @@ class ZPLGenerator:
         uf = cls._sanitize(inv.cliente_uf)[:2]
         req = cls._requester(inv)
         barcode = cls._barcode_value(inv)
+        label_note = cls._sanitize(inv.label_note or "")[:90]
 
         zpl = cls._header() + [
             "^FO70,35^A0N,56,52^FDP^FS",
@@ -127,8 +128,19 @@ class ZPLGenerator:
             f"^FO740,190^A0N,38,34^FD{uf}^FS",
             "^FO65,285^A0N,32,30^FDREQUISITANTE^FS",
             f"^FO85,330^A0N,28,24^FD{req}^FS",
-            "^FO65,405^GB750,38,1^FS",
-            f"^FO75,414^A0N,18,16^FD{barcode}^FS",
+        ]
+        if label_note:
+            zpl += [
+                f"^FO65,382^A0N,18,16^FDOBS: {label_note}^FS",
+                "^FO65,425^GB750,30,1^FS",
+                f"^FO75,432^A0N,15,13^FD{barcode}^FS",
+            ]
+        else:
+            zpl += [
+                "^FO65,405^GB750,38,1^FS",
+                f"^FO75,414^A0N,18,16^FD{barcode}^FS",
+            ]
+        zpl += [
             "^FO190,468^A0N,15,13^FDFAVOR CONFERIR O MATERIAL NO ATO DO RECEBIMENTO,^FS",
             "^FO168,487^A0N,15,13^FDNAO ACEITAREMOS RECLAMACOES OU DEVOLUCOES POSTERIORES.^FS",
             "^FO64,522^A0N,22,18^FDR. FRANCISCO EUGENIO 268 SALA 636, SAO CRISTOVAO RJ - TEL:21 3878-8855^FS",
@@ -232,6 +244,20 @@ class ZPLGenerator:
         if is_claro:
             return cls.preview_html_claro_pair(inv, None, vol, total)
         barcode = html.escape(cls._barcode_value(inv))
+        label_note = html.escape(cls._sanitize(inv.label_note or "")[:90])
+        note_html = ""
+        barcode_height = 42
+        spacer_after_barcode = 18
+        if label_note:
+            note_html = f"""
+          <tr>
+            <td colspan="12" height="22" valign="middle" style="border-bottom:1px solid #b7b7b7;padding-left:8px;font-size:11px;font-weight:700;">
+              OBS: {label_note}
+            </td>
+          </tr>
+            """
+            barcode_height = 36
+            spacer_after_barcode = 10
         return f"""
         <table width="768" cellspacing="0" cellpadding="0" style="background:#fff;color:#000;
                font-family:Arial,sans-serif;border:2px solid #8a8a8a;margin:100px auto 70px auto;border-collapse:collapse;table-layout:fixed;">
@@ -275,14 +301,15 @@ class ZPLGenerator:
               REQUISITANTE: {req or 'XXXXXXXX'}
             </td>
           </tr>
+          {note_html}
           <tr>
-            <td colspan="12" height="42" valign="top" style="border-bottom:1px solid #b7b7b7;padding:6px 8px 0 8px;">
+            <td colspan="12" height="{barcode_height}" valign="top" style="border-bottom:1px solid #b7b7b7;padding:6px 8px 0 8px;">
               <div style="height:26px;border:1px solid #000;font-size:22px;line-height:25px;overflow:hidden;letter-spacing:1px;">
                 ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
               </div>
             </td>
           </tr>
-          <tr><td colspan="12" height="18" style="border-bottom:2px solid #8a8a8a;"></td></tr>
+          <tr><td colspan="12" height="{spacer_after_barcode}" style="border-bottom:2px solid #8a8a8a;"></td></tr>
           <tr>
             <td colspan="12" height="29" align="center" valign="middle" style="font-size:10px;line-height:12px;">
               FAVOR CONFERIR O MATERIAL NO ATO DO RECEBIMENTO.<br>

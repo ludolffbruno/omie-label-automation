@@ -54,6 +54,16 @@ def test_generate_dp_default_template(base_invoice):
     assert '# BARPRT "35260500000000000000550010000503391000005555"' not in labels[0]
 
 
+def test_generate_dp_default_prints_model_note_above_barcode(base_invoice):
+    invoice = base_invoice.model_copy(update={"label_note": "ENTREGAR NA PORTARIA"})
+
+    label = DPGenerator.generate(invoice)[0]
+
+    assert 'PT "OBS: ENTREGAR NA PORTARIA"' in label
+    assert 'BARSET "CODE128",1,1,55' in label
+    assert 'PP 190,225' in label
+
+
 def test_generate_dp_claro_template(base_invoice):
     base_invoice.template_name = "claro"
     base_invoice.oc = "OC-9988-CLARO"
@@ -78,6 +88,17 @@ def test_generate_dp_claro_template(base_invoice):
     assert 'PP 95,455' in labels[0]
     assert 'PP 95,95' in labels[0]
     assert 'BARPRT "35260500000000000000550010000503391000005555"' in labels[0]
+
+
+def test_generate_dp_claro_ignores_model_note(base_invoice):
+    invoice = base_invoice.model_copy(update={
+        "template_name": "claro_dividida",
+        "label_note": "NAO IMPRIMIR NA CLARO",
+    })
+
+    label = DPGenerator.generate(invoice)[0]
+
+    assert "NAO IMPRIMIR NA CLARO" not in label
 
 
 def test_generate_dp_batch_claro_odd(base_invoice):

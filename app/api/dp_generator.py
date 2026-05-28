@@ -107,6 +107,7 @@ class DPGenerator:
         if not uf:
             uf = "XX"
         req = ZPLGenerator._requester(inv)
+        label_note = ZPLGenerator._sanitize(inv.label_note or "")[:80]
         barcode = ZPLGenerator._sanitize(inv.chave_nfe or inv.numero_nf or "")
         if not barcode:
             barcode = "XXXXXXXX"
@@ -212,11 +213,29 @@ class DPGenerator:
             "PP 270,285",
             f"PT \"{req}\"",
             "",
-            # ===== CODIGO DE BARRAS =====
-            "BARSET \"CODE128\",1,1,80",
-            "PP 190,240",
-            f"BARPRT \"{barcode}\"",
-            "",
+        ]
+        if label_note:
+            dp += [
+                # ===== OBSERVACAO DO MODELO =====
+                "FONT \"Swiss 721 BT\",8,0",
+                "PP 30,255",
+                f"PT \"OBS: {label_note}\"",
+                "",
+                # ===== CODIGO DE BARRAS =====
+                "BARSET \"CODE128\",1,1,55",
+                "PP 190,225",
+                f"BARPRT \"{barcode}\"",
+                "",
+            ]
+        else:
+            dp += [
+                # ===== CODIGO DE BARRAS =====
+                "BARSET \"CODE128\",1,1,80",
+                "PP 190,240",
+                f"BARPRT \"{barcode}\"",
+                "",
+            ]
+        dp += [
             # ===== LINHA SEPARADORA 3 =====
             "PP 30,200",
             "BARLINE 780,2",

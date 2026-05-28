@@ -44,6 +44,35 @@ def test_generate_default_template(base_invoice):
     assert "35260500000000000000550010000503391000005555" in labels[0]
 
 
+def test_generate_default_template_prints_model_note(base_invoice):
+    invoice = base_invoice.model_copy(update={"label_note": "ENTREGAR NA PORTARIA"})
+
+    label = ZPLGenerator.generate(invoice)[0]
+
+    assert "OBS: ENTREGAR NA PORTARIA" in label
+    assert "^FO65,425^GB750,30,1^FS" in label
+
+
+def test_preview_default_template_shows_model_note(base_invoice):
+    invoice = base_invoice.model_copy(update={"label_note": "ENTREGAR NA PORTARIA"})
+
+    html = ZPLGenerator.preview_html(invoice)
+
+    assert "OBS: ENTREGAR NA PORTARIA" in html
+
+
+def test_preview_claro_template_ignores_model_note(base_invoice):
+    invoice = base_invoice.model_copy(update={
+        "cliente_nome": "CLARO SA",
+        "template_name": "claro_dividida",
+        "label_note": "NAO IMPRIMIR NA CLARO",
+    })
+
+    html = ZPLGenerator.preview_html(invoice)
+
+    assert "NAO IMPRIMIR NA CLARO" not in html
+
+
 def test_generate_claro_template(base_invoice):
     base_invoice.template_name = "claro"
     base_invoice.oc = "OC-9988-CLARO"
@@ -61,6 +90,7 @@ def test_generate_claro_template(base_invoice):
     assert "PROTOCOLO" in labels[0]
     assert "AC/ Carlos Silva" in labels[0]
     assert "ORDEM-1122" in labels[0]
+    assert "OBS:" not in labels[0]
 
 
 def test_generate_gsk_template(base_invoice):

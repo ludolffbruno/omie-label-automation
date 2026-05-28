@@ -97,7 +97,7 @@ class PollingWorker(QThread):
         try:
             cached = self.db.get_cached_invoices_by_date(self.start_date)
             if isinstance(cached, list) and cached and not self._is_today_filter() and not self.force_refresh:
-                invoices = [self._sanitize_cached_invoice(inv) for inv in cached]
+                invoices = [self._refresh_cached_invoice_rules(inv) for inv in cached]
                 self.log_message.emit(f"Cache local usado para {self.start_date}: {len(invoices)} NF-e(s). Sem chamada Omie.", "INFO")
             else:
                 invoices = self.client.fetch_all_new_nfes(start_date=self.start_date, log_callback=self.log_message.emit)
@@ -157,6 +157,12 @@ class PollingWorker(QThread):
         if self._invalid_cached_value(inv.protocolo):
             updates["protocolo"] = None
         return inv.model_copy(update=updates) if updates else inv
+
+    def _refresh_cached_invoice_rules(self, inv: NormalizedInvoice) -> NormalizedInvoice:
+        refreshed = self.client.apply_rules_to_invoice(self._sanitize_cached_invoice(inv))
+        if refreshed != inv:
+            self.db.save_invoice_cache(refreshed)
+        return refreshed
 
     def _enrich_and_cache_invoice(self, inv: NormalizedInvoice) -> NormalizedInvoice:
         if not self._needs_danfe(inv):

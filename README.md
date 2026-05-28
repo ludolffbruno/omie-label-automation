@@ -33,9 +33,11 @@
 | 🖨️ **Impressão Honeywell DP** | Gera Direct Protocol nativo para Honeywell PC42t 203 dpi |
 | 🏷️ **Etiqueta padrão** | Modelo para clientes comuns, com pedido, NF-e, volume, UF e requisitante |
 | 📦 **Claro dividida** | Agrupa Claro/Telmex/Claro NXT em duas NF-e por etiqueta quando possível |
+| 🧩 **Modelos por cliente** | Cadastro visual de regras, observações, ordem e padrão por cliente |
+| ✏️ **Edição rápida** | Edição de etiqueta com opção de criar/atualizar modelo reutilizável |
 | ⏱️ **Controle de cooldown** | Evita erro Omie `REDUNDANT` respeitando tempo de nova tentativa |
 | 📊 **Logs operacionais** | Logs agregados e profissionais para busca, DANFE, cache e impressão |
-| 👁️ **Preview HTML** | Visualização antes da impressão, com paginação para múltiplas etiquetas |
+| 👁️ **Preview HTML** | Visualização antes da impressão, com paginação e observação no padrão |
 | 🧪 **Modo simulado** | Gera arquivos de impressão em `temp_labels/` sem enviar para impressora |
 
 ---
@@ -64,6 +66,7 @@
 - Credenciais Omie ficam somente no `.env` local.
 - Banco, logs, DANFEs, PDFs e arquivos temporários não são versionados.
 - No build `.exe`, dados locais ficam ao lado do executável.
+- `rules.json` pode ser versionado: guarda regras/modelos, não credenciais.
 
 ---
 
@@ -169,6 +172,20 @@ python main.py --print-dp-barcode-test SIMULADO_ZEBRA_01
 | **Padrão** | Clientes comuns | Uma NF-e por etiqueta |
 | **Claro dividida** | Claro SA, Telmex, Claro NXT | Duas NF-e por etiqueta quando a seleção permitir |
 | **GSK** | Regras específicas GSK | Usa template e extrações próprias |
+
+No botão **Modelos Etiquetas**:
+
+- `+ Novo Modelo` cria regra por cliente/texto/cidade/UF.
+- `Observação` imprime no modelo padrão e aparece no preview HTML.
+- `Tornar Padrão` marca a regra preferida para aquele cliente.
+- `↑` e `↓` organizam a lista de modelos.
+- Lixeira remove modelos criados; `Padrão` e `Claro Dividida` são protegidos.
+- Na grade, `ONS *` indica modelo aplicado com observação.
+
+No botão **Editar**, alterações estáveis podem virar modelo:
+
+- Salva nome exibido do cliente, requisitante, observação e layout.
+- Não salva dados voláteis como NF-e, pedido, protocolo, volume, data ou UF.
 
 Regras ficam em:
 

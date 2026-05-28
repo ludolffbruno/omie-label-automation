@@ -111,6 +111,37 @@ def test_cached_de_value_is_invalidated():
     assert sanitized.protocolo is None
 
 
+def test_cached_invoice_reapplies_current_rules():
+    invoice = NormalizedInvoice(
+        id_nfe=20386,
+        numero_nf="00050386",
+        chave_nfe="35260500000000000000550010000503861000000000",
+        cliente_nome="OPERADOR NACIONAL DO SISTEMA ELETRICO ONS",
+        cliente_cnpj_cpf="00.000.000/0001-00",
+        cliente_uf="RJ",
+        quantidade_volumes=1,
+        status="APROVADA",
+        data_emissao="21/05/2026",
+        template_name="default",
+    )
+    db = MagicMock()
+    worker = PollingWorker(printer_name="SIMULADO_ZEBRA_01", db_manager=db, start_date="21/05/2026")
+    worker.client.rules["ONS"] = {
+        "name": "ONS",
+        "template": "gsk",
+        "label_note": "OBS ONS",
+        "conditions": [{"field": "cliente", "operator": "contains", "value": "ONS"}],
+        "mappings": {},
+    }
+
+    refreshed = worker._refresh_cached_invoice_rules(invoice)
+
+    assert refreshed.template_name == "gsk"
+    assert refreshed.model_name == "ONS"
+    assert refreshed.label_note == "OBS ONS"
+    db.save_invoice_cache.assert_called_once()
+
+
 def test_run_cycle_logs_summary_without_per_note_limit_spam():
     QCoreApplication.instance() or QCoreApplication([])
     invoice = NormalizedInvoice(

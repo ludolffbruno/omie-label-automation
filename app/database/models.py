@@ -30,6 +30,8 @@ class NormalizedInvoice(BaseModel):
     
     # Layout and Metadata
     template_name: str = Field("default", description="Template to use (claro, gsk, default)")
+    model_name: Optional[str] = Field(None, description="Friendly model name applied by rules")
+    label_note: Optional[str] = Field(None, description="Manual note printed on standard labels")
     observacoes: Optional[str] = Field(None, description="Raw observations text (cObs)")
     processed_at: str = Field(default_factory=lambda: datetime.now().isoformat(), description="Timestamp of parsing")
 

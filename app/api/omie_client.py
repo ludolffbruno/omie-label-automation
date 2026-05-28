@@ -397,6 +397,8 @@ class OmieClient:
         # Determine client rules configuration
         client_rules = self._match_client_rules(cliente_nome, cliente_cnpj_cpf, raw_nfe, cliente_uf)
         template_name = client_rules.get("template", "default")
+        model_name = client_rules.get("name") or None
+        overrides = client_rules.get("overrides") or {}
         mappings = client_rules.get("mappings", {})
         
         # Raw observations and searchable text extracted from the NF-e response
@@ -424,6 +426,8 @@ class OmieClient:
             extracted["requisitante"] = "MUCIO 2121-3885"
         else:
             protocolo = None
+        if overrides.get("requisitante"):
+            extracted["requisitante"] = str(overrides.get("requisitante")).strip()
             
         # Parse volumes quantity
         volumes_raw = transportadora.get("nQtdVol", 1)
@@ -438,7 +442,7 @@ class OmieClient:
             id_nfe=id_nfe,
             numero_nf=numero_nf,
             chave_nfe=chave_nfe,
-            cliente_nome=cliente_nome,
+            cliente_nome=str(overrides.get("cliente_nome") or cliente_nome).strip(),
             cliente_cnpj_cpf=cliente_cnpj_cpf,
             cliente_uf=cliente_uf,
             pedido_venda=pedido_venda,
@@ -451,6 +455,8 @@ class OmieClient:
             status=cabecalho.get("cStatus", "APROVADA"),
             data_emissao=cabecalho.get("dEmis", ""),
             template_name=template_name,
+            model_name=model_name,
+            label_note=client_rules.get("label_note") or None,
             observacoes=observacoes or None
         )
 
@@ -497,6 +503,8 @@ class OmieClient:
 
         client_rules = self._match_client_rules(cliente_nome, cliente_cnpj_cpf, raw_nfe, cliente_uf)
         template_name = client_rules.get("template", "default")
+        model_name = client_rules.get("name") or None
+        overrides = client_rules.get("overrides") or {}
         mappings = client_rules.get("mappings", {})
         extracted = {
             field: self._extract_value(mapping, raw_nfe, observacoes, pedido_venda)
@@ -517,12 +525,14 @@ class OmieClient:
             extracted["requisitante"] = "MUCIO 2121-3885"
         else:
             protocolo = None
+        if overrides.get("requisitante"):
+            extracted["requisitante"] = str(overrides.get("requisitante")).strip()
 
         return NormalizedInvoice(
             id_nfe=int(id_nfe),
             numero_nf=numero_nf,
             chave_nfe=chave_nfe,
-            cliente_nome=cliente_nome,
+            cliente_nome=str(overrides.get("cliente_nome") or cliente_nome).strip(),
             cliente_cnpj_cpf=cliente_cnpj_cpf,
             cliente_uf=cliente_uf,
             pedido_venda=pedido_venda,
@@ -535,6 +545,8 @@ class OmieClient:
             status="CANCELADA" if ide.get("dCan") else "APROVADA",
             data_emissao=ide.get("dEmi", ""),
             template_name=template_name,
+            model_name=model_name,
+            label_note=client_rules.get("label_note") or None,
             observacoes=observacoes or None
         )
 
@@ -543,6 +555,28 @@ class OmieClient:
         if not inv.cliente_uf or not pedido or not inv.observacoes:
             return True
         return self._is_claro_cliente(inv.cliente_nome, inv.cliente_cnpj_cpf) and not inv.protocolo
+
+    def apply_rules_to_invoice(self, inv: NormalizedInvoice) -> NormalizedInvoice:
+        """Reapplies current rules to an already normalized/cache invoice without Omie calls."""
+        raw = {
+            "cliente_nome": inv.cliente_nome,
+            "observacoes": inv.observacoes or "",
+            "infAdic": {"infCpl": inv.observacoes or ""},
+            "info": {"cObs": inv.observacoes or ""},
+        }
+        rules = self._match_client_rules(inv.cliente_nome, inv.cliente_cnpj_cpf, raw, inv.cliente_uf)
+        template_name = rules.get("template", inv.template_name or "default")
+        model_name = rules.get("name") or None
+        overrides = rules.get("overrides") or {}
+        if self._is_claro_cliente(inv.cliente_nome, inv.cliente_cnpj_cpf):
+            template_name = "claro_dividida"
+        return inv.model_copy(update={
+            "cliente_nome": str(overrides.get("cliente_nome") or inv.cliente_nome).strip(),
+            "requisitante": str(overrides.get("requisitante") or inv.requisitante or "").strip() or None,
+            "template_name": template_name,
+            "model_name": model_name,
+            "label_note": rules.get("label_note") or None,
+        })
 
     @staticmethod
     def _is_output_invoice(raw_nfe: Dict[str, Any]) -> bool:

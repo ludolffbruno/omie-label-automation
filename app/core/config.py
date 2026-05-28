@@ -23,6 +23,7 @@ class AppConfig:
         self.polling_interval = 240 # Tempo busca API OMIE
         self.auto_print = False
         self.printer_name = ""
+        self.table_column_widths = {}
         self.log_dir = "logs"
         self.db_path = "omie_automation.db"
         # NOTA DE HARDWARE: A impressora Honeywell PC42t do cliente opera especificamente 
@@ -42,6 +43,7 @@ class AppConfig:
                     self.polling_interval = data.get("polling_interval", self.polling_interval)
                     self.auto_print = data.get("auto_print", self.auto_print)
                     self.printer_name = data.get("printer_name", self.printer_name)
+                    self.table_column_widths = data.get("table_column_widths", self.table_column_widths)
                     self.log_dir = data.get("log_dir", self.log_dir)
                     self.db_path = data.get("db_path", self.db_path)
                     # Força Direct Protocol (DP) nativo para compatibilidade com a impressora Honeywell PC42t
@@ -58,6 +60,7 @@ class AppConfig:
             "polling_interval": self.polling_interval,
             "auto_print": self.auto_print,
             "printer_name": self.printer_name,
+            "table_column_widths": self.table_column_widths,
             "log_dir": self.log_dir,
             "db_path": self.db_path,
             "use_gdi": False,  # Desativado por padrão para Honeywell PC42t
