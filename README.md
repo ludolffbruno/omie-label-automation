@@ -1,22 +1,21 @@
+<div align="center">
+
+<br/>
+
 # 🏷️ Omie Label Automation
 
-> Sistema profissional de **automação de impressão de etiquetas logísticas** integrado ao ERP **Omie via API oficial**.
-> Monitora faturamentos em tempo real, gera etiquetas ZPL e imprime automaticamente em impressoras Honeywell PC42t 203 DPI.
+**Monitor de NF-e Omie com enriquecimento por DANFE e impressão logística em Honeywell PC42t Direct Protocol.**
 
----
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org)
+[![PySide6](https://img.shields.io/badge/UI-PySide6-41CD52?style=flat-square&logo=qt&logoColor=white)](https://doc.qt.io/qtforpython-6/)
+[![SQLite](https://img.shields.io/badge/Cache-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org)
+[![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=flat-square&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
+[![Honeywell](https://img.shields.io/badge/Printer-PC42t_DP-f59e0b?style=flat-square)](https://sps.honeywell.com)
+[![Omie](https://img.shields.io/badge/API-Omie-0891d1?style=flat-square)](https://developer.omie.com.br/)
 
-## 📋 Sumário
+[Funcionalidades](#-funcionalidades) · [Stack](#-stack-técnica) · [Como Rodar](#-como-rodar) · [Gerar EXE](#-gerar-exe) · [Segurança](#-segurança)
 
-- [Funcionalidades](#-funcionalidades)
-- [Arquitetura do Projeto](#-arquitetura-do-projeto)
-- [Pré-requisitos](#-pré-requisitos)
-- [Instalação](#-instalação)
-- [Configuração](#-configuração)
-- [Como Usar](#-como-usar)
-- [Templates de Etiquetas](#-templates-de-etiquetas)
-- [Regras de Clientes](#-regras-de-clientes)
-- [Testes](#-testes)
-- [Referência de Comandos CLI](#-referência-de-comandos-cli)
+</div>
 
 ---
 
@@ -24,311 +23,260 @@
 
 | Funcionalidade | Descrição |
 |---|---|
-| **Integração Omie** | Consulta NF-es aprovadas via API oficial JSON-RPC com paginação e retry automático |
-| **Templates ZPL** | Gera etiquetas 100×150mm com código de barras Code 128 para Default, Claro e GSK |
-| **Multi-volume** | Imprime uma etiqueta por caixa (`Volume X de Y`) automaticamente |
-| **Impressão RAW** | Envia ZPL bruto diretamente ao spooler Windows via `win32print` |
-| **Anti-duplicação** | Banco de dados SQLite local garante que nenhuma nota é impressa duas vezes |
-| **Interface Gráfica** | Dashboard PySide6 com tema escuro premium, logs em tempo real e controles visuais |
-| **Monitor Automático** | Thread de polling configurável que verifica o ERP a cada N segundos |
-| **Fallback de Simulação** | Sem impressora física? Salva arquivos `.zpl` localmente para inspeção |
-| **Regras por Cliente** | Motor de extração regex/JSON configurável por cliente em `rules.json` |
+| 🔎 **Busca por data exata** | Consulta NF-e faturada no Omie somente na data selecionada |
+| 🧾 **Enriquecimento via DANFE** | Preenche UF, pedido, protocolo e requisitante a partir do PDF da DANFE |
+| 💾 **Cache local SQLite** | Evita chamadas repetidas ao Omie e reaproveita DANFEs já processados |
+| 🖨️ **Impressão Honeywell DP** | Gera Direct Protocol nativo para Honeywell PC42t 203 dpi |
+| 🏷️ **Etiqueta padrão** | Modelo para clientes comuns, com pedido, NF-e, volume, UF e requisitante |
+| 📦 **Claro dividida** | Agrupa Claro/Telmex/Claro NXT em duas NF-e por etiqueta quando possível |
+| ⏱️ **Controle de cooldown** | Evita erro Omie `REDUNDANT` respeitando tempo de nova tentativa |
+| 📊 **Logs operacionais** | Logs agregados e profissionais para busca, DANFE, cache e impressão |
+| 👁️ **Preview HTML** | Visualização antes da impressão, com paginação para múltiplas etiquetas |
+| 🧪 **Modo simulado** | Gera arquivos de impressão em `temp_labels/` sem enviar para impressora |
 
 ---
 
-## 🏗️ Arquitetura do Projeto
+## 🛠️ Stack Técnica
 
-```
-AUTOMACAO__ETIQUETAS/
-├── main.py                     # Ponto de entrada (CLI + UI)
-├── requirements.txt            # Dependências Python
-├── .env                        # Credenciais (não versionado)
-├── .env.example                # Modelo de credenciais
-├── config.json                 # Configurações da aplicação (gerado automaticamente)
-│
-├── app/
-│   ├── api/
-│   │   ├── omie_client.py      # Cliente JSON-RPC para a API Omie
-│   │   ├── zpl_generator.py    # Motor de templates ZPL (Default, Claro, GSK)
-│   │   └── printer_service.py  # Spooler de impressão (win32print + simulação)
-│   │
-│   ├── core/
-│   │   ├── config.py           # Configuração centralizada via .env e config.json
-│   │   ├── logger.py           # Logging com loguru (console + arquivo rotativo)
-│   │   ├── polling_worker.py   # Thread de monitoramento em background (QThread)
-│   │   └── rules.json          # Regras de extração por cliente (regex/JSONPath)
-│   │
-│   ├── database/
-│   │   └── models.py           # Modelos Pydantic + DatabaseManager (SQLite)
-│   │
-│   └── ui/
-│       ├── ui_main.py          # Janela principal PySide6
-│       └── styles.py           # Tema escuro premium (stylesheet global)
-│
-├── tests/
-│   ├── test_omie_client.py     # Testes da API Omie e normalização
-│   ├── test_zpl_generator.py   # Testes dos templates ZPL
-│   └── test_printer_service.py # Testes do serviço de impressão
-│
-├── logs/                       # Logs rotativos da aplicação
-└── temp_labels/                # Arquivos ZPL gerados no modo simulação
-```
-
----
-
-## 🖥️ Pré-requisitos
-
-| Requisito | Versão mínima |
+| Camada | Tecnologia |
 |---|---|
-| Python | 3.10+ |
-| Windows | 10 / 11 (para impressão física via `win32print`) |
-| Omie ERP | Conta ativa com App Key + App Secret |
-| Impressora Honeywell | PC42t 203 DPI com linguagem ZPL compatível |
-
-> **Nota:** A aplicação roda em qualquer OS para desenvolvimento, mas a impressão física via `win32print` requer Windows.
+| **Linguagem** | Python 3.10+ |
+| **Interface** | PySide6 |
+| **API** | Omie JSON-RPC |
+| **HTTP** | httpx + retry/backoff |
+| **PDF/DANFE** | pypdf |
+| **Banco local** | SQLite |
+| **Impressão** | win32print RAW |
+| **Linguagem de etiqueta** | Honeywell Direct Protocol (DP) |
+| **Build Windows** | PyInstaller |
+| **Testes** | pytest |
 
 ---
 
-## ⚙️ Instalação
+## 🔒 Segurança
 
-### 1. Clone o repositório
+- `.env` nunca deve ser versionado.
+- `config.json`, bancos `.db`, logs e etiquetas temporárias estão no `.gitignore`.
+- DANFEs/PDFs/modelos locais de cliente também ficam fora do Git.
+- O `.exe` lê `.env`, `config.json`, banco e logs ao lado do executável.
+- As credenciais Omie devem existir apenas no computador de execução.
 
-```bash
-git clone <url-do-repositorio>
-cd AUTOMACAO__ETIQUETAS
+Arquivos sensíveis ignorados:
+
+```text
+.env
+config.json
+*.db
+logs/
+temp_labels/
+Modelo nota fiscal/
+modelo notafiscal*
+*.pdf
 ```
 
-### 2. Crie e ative o ambiente virtual
+---
 
-```bash
+## ▶️ Como Rodar
+
+### Pré-requisitos
+
+- Windows 10/11
+- Python 3.10+
+- Honeywell PC42t instalada no Windows
+- Credenciais Omie: `OMIE_APP_KEY` e `OMIE_APP_SECRET`
+
+### 1. Instale dependências
+
+```powershell
 python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-
-# Linux/macOS
-source .venv/bin/activate
-```
-
-### 3. Instale as dependências
-
-```bash
+.\.venv\Scripts\activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
----
+### 2. Configure ambiente
 
-## 🔑 Configuração
-
-### 1. Configure as credenciais Omie
-
-Copie o arquivo de exemplo e preencha com suas credenciais:
-
-```bash
-copy .env.example .env
-```
-
-Edite o arquivo `.env`:
+Crie `.env` na raiz:
 
 ```env
-# Obtido em: Omie ERP → Configurações → Meus Aplicativos
-OMIE_APP_KEY=sua_app_key_aqui
-OMIE_APP_SECRET=seu_app_secret_aqui
+OMIE_APP_KEY=sua_app_key
+OMIE_APP_SECRET=sua_app_secret
 ```
 
-> 💡 Para obter as credenciais: acesse o [Portal do Desenvolvedor Omie](https://developer.omie.com.br/), crie um aplicativo e copie o `App Key` e `App Secret`.
+### 3. Execute
 
-### 2. Ajuste as configurações da aplicação
-
-O arquivo `config.json` é gerado automaticamente na primeira execução. Edite conforme necessário:
-
-```json
-{
-    "polling_interval": 30,
-    "auto_print": false,
-    "printer_name": "",
-    "log_dir": "logs",
-    "db_path": "omie_automation.db"
-}
-```
-
-| Parâmetro | Descrição | Padrão |
-|---|---|---|
-| `polling_interval` | Segundos entre cada varredura automática | `30` |
-| `auto_print` | Imprimir automaticamente toda nova NF-e | `false` |
-| `printer_name` | Nome da impressora padrão | `""` |
-| `log_dir` | Pasta dos arquivos de log | `logs/` |
-| `db_path` | Caminho do banco de dados SQLite | `omie_automation.db` |
-
----
-
-## 🚀 Como Usar
-
-### Interface Gráfica (recomendado)
-
-```bash
+```powershell
 python main.py
 ```
 
-A interface abre automaticamente quando nenhum argumento é fornecido.
+---
 
-![Dashboard](.github/dashboard_preview.png)
+## 📦 Gerar EXE
 
-**Fluxo básico:**
-1. Selecione a Honeywell PC42t no dropdown (ou `SIMULADO_ZEBRA_01` para testes)
-2. Ajuste o intervalo de varredura (padrão: 30 segundos)
-3. Marque **"Imprimir automaticamente"** se desejar impressão sem confirmação
-4. Clique em **"Iniciar Monitor"**
+Execute na raiz do projeto:
 
-### Modo de Linha de Comando
+```powershell
+.\.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m PyInstaller --noconfirm --clean --windowed --name "OmieLabelAutomation" --add-data "app/core/rules.json;app/core" --hidden-import win32timezone main.py
+```
 
-```bash
-# Verificar status e configurações
+Saída:
+
+```text
+dist\OmieLabelAutomation\OmieLabelAutomation.exe
+```
+
+Para instalar em outro computador, copie a pasta inteira:
+
+```text
+dist\OmieLabelAutomation\
+```
+
+No computador destino, crie `.env` ao lado do `.exe`:
+
+```env
+OMIE_APP_KEY=sua_app_key
+OMIE_APP_SECRET=sua_app_secret
+```
+
+---
+
+## 🧪 Comandos Úteis
+
+```powershell
+# Interface
+python main.py
+
+# Status local
 python main.py --status
 
-# Testar conexão com a API Omie
+# Testar credenciais Omie
 python main.py --test-connection
 
-# Listar impressoras disponíveis no sistema
+# Listar impressoras
 python main.py --list-printers
 
-# Enviar etiqueta de teste para uma impressora
+# Etiqueta de teste
 python main.py --print-test-label "Honeywell PC42t"
 
-# Enviar etiqueta de teste no modo simulado (gera arquivo .zpl)
+# Teste fisico isolado do barcode DP
+python main.py --print-dp-barcode-test "Honeywell PC42t"
+
+# Simulacao sem impressora
 python main.py --print-test-label SIMULADO_ZEBRA_01
-
-# Buscar e exibir NF-es a partir de uma data
-python main.py --fetch-date 01/05/2026
+python main.py --print-dp-barcode-test SIMULADO_ZEBRA_01
 ```
 
 ---
 
-## 🏷️ Templates de Etiquetas
+## 🏷️ Modelos de Etiqueta
 
-O sistema gera etiquetas **100×150mm** (4×6 polegadas) em código **ZPL** com **Code 128** da chave de acesso NF-e.
+| Modelo | Quando usar | Comportamento |
+|---|---|---|
+| **Padrão** | Clientes comuns | Uma NF-e por etiqueta |
+| **Claro dividida** | Claro SA, Telmex, Claro NXT | Duas NF-e por etiqueta quando a seleção permitir |
+| **GSK** | Regras específicas GSK | Usa template e extrações próprias |
 
-### Template Padrão (`default`)
-Usado para clientes sem regra específica cadastrada.
+Regras ficam em:
 
-```
-┌────────────────────────────────┐
-│  ETIQUETA LOGISTICA            │
-├────────────────────────────────┤
-│  Destinatário: [NOME CLIENTE]  │
-│  CNPJ: [XX.XXX.XXX/0001-XX]   │
-├────────────────────────────────┤
-│  Nota Fiscal: [NF]             │
-│  Pedido Omie: [PEDIDO]         │
-│  Pedido Cliente: [PED CLI]     │
-├────────────────────────────────┤
-│      VOLUME 1 DE 2             │
-├────────────────────────────────┤
-│  ┌──────────────────────────┐  │
-│  │ ▐▌▌▐▌▐▌▌▐▌▌▐▌▌▐▌▐▌▌ │  │
-│  └──────────────────────────┘  │
-│  [CHAVE NF-e em blocos de 4]   │
-└────────────────────────────────┘
-```
-
-### Template Claro (`claro`)
-Inclui destaque para **Ordem de Compra (OC)**, **Requisitante (A/C)** e **Número de Ordem**.
-
-### Template GSK (`gsk`)
-Inclui destaque para **GSK-OC**, **Solicitante** e **Pedido de Venda Omie**.
-
----
-
-## ⚙️ Regras de Clientes
-
-O arquivo `app/core/rules.json` define como extrair campos customizados das observações da NF-e:
-
-```json
-{
-    "CLARO": {
-        "template": "claro",
-        "mappings": {
-            "oc": {
-                "source": "observacoes",
-                "regex": "(?:OC|PEDIDO COMPRA|ORDEM DE COMPRA):?\\s*([A-Za-z0-9\\-]+)"
-            },
-            "requisitante": {
-                "source": "observacoes",
-                "regex": "(?:A/C|REQUISITANTE|SOLICITANTE):?\\s*([^|\\n;]+)"
-            },
-            "numero_ordem": {
-                "source": "observacoes",
-                "regex": "(?:N[Ooº]\\s*ORDEM|ORDEM):?\\s*([A-Za-z0-9\\-]+)"
-            }
-        }
-    },
-    "MEU_CLIENTE": {
-        "template": "default",
-        "mappings": {
-            "oc": {
-                "source": "observacoes",
-                "regex": "MINHA_OC:\\s*([A-Za-z0-9\\-]+)"
-            }
-        }
-    }
-}
-```
-
-**Como adicionar um novo cliente:**
-1. Abra `app/core/rules.json`
-2. Adicione uma nova chave com parte do nome do cliente (ex: `"PETROBRAS"`)
-3. Defina o `template` (`default`, `claro` ou `gsk`) e as expressões regex para extração
-4. Reinicie a aplicação
-
----
-
-## 🧪 Testes
-
-```bash
-# Rodar toda a suíte de testes
-python -m pytest tests/ -v
-
-# Resultado esperado
-# 14 passed in ~1.5s
-```
-
-| Arquivo de Teste | Cobertura |
-|---|---|
-| `test_omie_client.py` | Autenticação, normalização de NF-e, paginação, regras Claro/GSK |
-| `test_zpl_generator.py` | Geração de ZPL, sanitização de acentos, multi-volume |
-| `test_printer_service.py` | Listagem de impressoras, impressão RAW win32, modo simulado |
-
----
-
-## 📖 Referência de Comandos CLI
-
-```
-usage: main.py [-h] [--test-connection] [--fetch-date DATA]
-               [--list-printers] [--print-test-label IMPRESSORA]
-               [--ui] [--status]
-
-Omie Label Automation - CLI Tool
-
-options:
-  --ui                    Abre a interface gráfica (padrão sem argumentos)
-  --test-connection       Valida credenciais e testa conexão com a API Omie
-  --fetch-date DD/MM/AAAA Busca NF-es aprovadas a partir dessa data
-  --list-printers         Lista todas as impressoras do sistema
-  --print-test-label NOME Envia etiqueta de teste para a impressora especificada
-  --status                Exibe o status atual das configurações
+```text
+app/core/rules.json
 ```
 
 ---
 
-## 🔗 Links Úteis
+## 📁 Estrutura do Projeto
 
-- [Portal do Desenvolvedor Omie](https://developer.omie.com.br/)
-- [Lista de APIs Omie](https://developer.omie.com.br/service-list/)
-- [Linguagem ZPL — referência Zebra](https://www.zebra.com/us/en/support-downloads/knowledge-articles/zpl-zbi2-pm-programming-guide.html)
-- [Labelary ZPL Viewer](http://labelary.com/viewer.html) — Visualize os arquivos `.zpl` gerados em `temp_labels/`
+```text
+AUTOMACAO__ETIQUETAS/
+├── main.py
+├── requirements.txt
+├── OmieLabelAutomation.spec
+├── app/
+│   ├── api/
+│   │   ├── omie_client.py
+│   │   ├── printer_service.py
+│   │   ├── zpl_generator.py
+│   │   └── dp_generator.py
+│   ├── core/
+│   │   ├── config.py
+│   │   ├── logger.py
+│   │   ├── polling_worker.py
+│   │   └── rules.json
+│   ├── database/
+│   │   └── models.py
+│   └── ui/
+│       ├── ui_main.py
+│       └── styles.py
+└── tests/
+```
+
+---
+
+## ✅ Testes
+
+```powershell
+python -m pytest tests -q
+```
+
+Teste específico do gerador DP:
+
+```powershell
+python -m pytest tests/test_dp_generator.py -q
+```
+
+Resultado atual validado:
+
+```text
+42 passed
+```
+
+---
+
+## 🚀 Publicação no GitHub
+
+Instale e autentique o GitHub CLI:
+
+```powershell
+winget install --id GitHub.cli -e --accept-package-agreements --accept-source-agreements
+gh auth login
+gh auth status
+```
+
+Criar repositório privado:
+
+```powershell
+gh repo create ludolffbruno/omie-label-automation --private --source . --remote origin --push
+```
+
+Criar repositório público:
+
+```powershell
+gh repo create ludolffbruno/omie-label-automation --public --source . --remote origin --push
+```
+
+---
+
+## 👤 Autor
+
+<div align="center">
+
+**Bruno Ludolff** · MrLudolff
+
+[![GitHub](https://img.shields.io/badge/GitHub-ludolffbruno-181717?style=flat-square&logo=github)](https://github.com/ludolffbruno)
+
+</div>
 
 ---
 
 ## 📄 Licença
 
-Projeto proprietário — Antigravity Projetos © 2026. Todos os direitos reservados.
+Projeto proprietário. Uso interno/autorizado.
+
+---
+
+<div align="center">
+  <sub>Desenvolvido para operação logística com Omie + Honeywell PC42t · <strong>MrLudolff</strong></sub>
+</div>

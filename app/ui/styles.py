@@ -90,10 +90,10 @@ QPushButton {
     background-color: #21262d;
     color: #e6edf3;
     border: 1px solid #30363d;
-    border-radius: 6px;
-    padding: 7px 16px;
+    border-radius: 4px;
+    padding: 3px 10px;
     font-size: 13px;
-    min-height: 32px;
+    min-height: 24px;
 }
 QPushButton:hover {
     background-color: #30363d;
@@ -151,16 +151,16 @@ QPushButton#btnPrint:hover {
 }
 
 /* ---- INPUTS ---- */
-QLineEdit, QSpinBox, QComboBox {
-    background-color: #0d1117;
+QLineEdit, QSpinBox, QComboBox, QDateEdit, QAbstractSpinBox {
+    background-color: #161b22;
     color: #e6edf3;
-    border: 1px solid #30363d;
-    border-radius: 6px;
-    padding: 5px 10px;
-    min-height: 28px;
+    border: 1px solid #21262d;
+    border-radius: 4px;
+    padding: 2px 6px;
+    min-height: 22px;
     selection-background-color: #1f6feb;
 }
-QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
+QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QDateEdit:focus, QAbstractSpinBox:focus {
     border-color: #58a6ff;
     outline: none;
 }

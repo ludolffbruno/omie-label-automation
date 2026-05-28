@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -45,7 +46,7 @@ class DatabaseManager:
         self.init_db()
 
     def get_connection(self):
-        return sqlite3.connect(self.db_absolute_path)
+        return sqlite3.connect(self.db_absolute_path, timeout=30.0)
 
     def init_db(self):
         """Initializes tables if they do not exist."""
@@ -77,7 +78,57 @@ class DatabaseManager:
                     timestamp TEXT NOT NULL
                 )
             """)
+            
+            # customer cache table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS customer_cache (
+                    codigo_cliente INTEGER PRIMARY KEY,
+                    estado TEXT,
+                    razao_social TEXT,
+                    cnpj_cpf TEXT,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            
+            # order cache table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS order_cache (
+                    codigo_pedido INTEGER PRIMARY KEY,
+                    obs_pedido TEXT,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS invoice_cache (
+                    id_nfe INTEGER PRIMARY KEY,
+                    data_emissao TEXT NOT NULL,
+                    numero_nf TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    enrichment_status TEXT DEFAULT 'pending',
+                    danfe_path TEXT,
+                    last_error TEXT,
+                    last_attempt_at TEXT,
+                    next_attempt_at TEXT,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            self._ensure_invoice_cache_columns(cursor)
             conn.commit()
+
+    def _ensure_invoice_cache_columns(self, cursor):
+        cursor.execute("PRAGMA table_info(invoice_cache)")
+        existing = {row[1] for row in cursor.fetchall()}
+        columns = {
+            "enrichment_status": "TEXT DEFAULT 'pending'",
+            "danfe_path": "TEXT",
+            "last_error": "TEXT",
+            "last_attempt_at": "TEXT",
+            "next_attempt_at": "TEXT",
+        }
+        for name, definition in columns.items():
+            if name not in existing:
+                cursor.execute(f"ALTER TABLE invoice_cache ADD COLUMN {name} {definition}")
 
     def is_nfe_processed(self, id_nfe: int) -> bool:
         """Checks if the NFe has already been processed."""
@@ -107,3 +158,128 @@ class DatabaseManager:
                 VALUES (?, ?, ?, ?)
             """, (id_nfe, tipo, mensagem, now))
             conn.commit()
+
+    def get_customer_state(self, codigo_cliente: int) -> Optional[str]:
+        """Gets customer state (UF) from persistent cache."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT estado FROM customer_cache WHERE codigo_cliente = ?", (codigo_cliente,))
+                row = cursor.fetchone()
+                return row[0] if row else None
+        except Exception:
+            return None
+
+    def save_customer_state(self, codigo_cliente: int, estado: str, razao_social: str = "", cnpj_cpf: str = ""):
+        """Saves customer state (UF) to persistent cache."""
+        try:
+            now = datetime.now().isoformat()
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO customer_cache (codigo_cliente, estado, razao_social, cnpj_cpf, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (codigo_cliente, estado, razao_social, cnpj_cpf, now))
+                conn.commit()
+        except Exception:
+            pass
+
+    def get_order_obs(self, codigo_pedido: int) -> Optional[str]:
+        """Gets order observations from persistent cache."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT obs_pedido FROM order_cache WHERE codigo_pedido = ?", (codigo_pedido,))
+                row = cursor.fetchone()
+                return row[0] if row else None
+        except Exception:
+            return None
+
+    def save_order_obs(self, codigo_pedido: int, obs_pedido: str):
+        """Saves order observations to persistent cache."""
+        try:
+            now = datetime.now().isoformat()
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO order_cache (codigo_pedido, obs_pedido, updated_at)
+                    VALUES (?, ?, ?)
+                """, (codigo_pedido, obs_pedido, now))
+                conn.commit()
+        except Exception:
+            pass
+
+    def get_cached_invoices_by_date(self, data_emissao: str) -> list[NormalizedInvoice]:
+        """Returns normalized invoices cached for an emission date."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT payload_json FROM invoice_cache WHERE data_emissao = ? ORDER BY numero_nf DESC",
+                    (data_emissao,),
+                )
+                invoices = []
+                for (payload_json,) in cursor.fetchall():
+                    invoices.append(NormalizedInvoice(**json.loads(payload_json)))
+                return invoices
+        except Exception:
+            return []
+
+    def get_invoice_cache_meta(self, id_nfe: int) -> dict:
+        """Returns cached enrichment metadata for one NF-e."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT enrichment_status, danfe_path, last_error, last_attempt_at, next_attempt_at
+                    FROM invoice_cache WHERE id_nfe = ?
+                """, (id_nfe,))
+                row = cursor.fetchone()
+                if not row:
+                    return {}
+                return {
+                    "enrichment_status": row[0],
+                    "danfe_path": row[1],
+                    "last_error": row[2],
+                    "last_attempt_at": row[3],
+                    "next_attempt_at": row[4],
+                }
+        except Exception:
+            return {}
+
+    def save_invoice_cache(
+        self,
+        invoice: NormalizedInvoice,
+        enrichment_status: Optional[str] = None,
+        danfe_path: Optional[str] = None,
+        last_error: Optional[str] = None,
+        last_attempt_at: Optional[str] = None,
+        next_attempt_at: Optional[str] = None,
+    ):
+        """Saves one normalized invoice for later date searches."""
+        try:
+            now = datetime.now().isoformat()
+            current = self.get_invoice_cache_meta(invoice.id_nfe)
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO invoice_cache (
+                        id_nfe, data_emissao, numero_nf, payload_json,
+                        enrichment_status, danfe_path, last_error, last_attempt_at, next_attempt_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    invoice.id_nfe,
+                    invoice.data_emissao,
+                    invoice.numero_nf,
+                    invoice.model_dump_json(),
+                    enrichment_status if enrichment_status is not None else current.get("enrichment_status", "pending"),
+                    danfe_path if danfe_path is not None else current.get("danfe_path"),
+                    last_error if last_error is not None else current.get("last_error"),
+                    last_attempt_at if last_attempt_at is not None else current.get("last_attempt_at"),
+                    next_attempt_at if next_attempt_at is not None else current.get("next_attempt_at"),
+                    now,
+                ))
+                conn.commit()
+        except Exception:
+            pass

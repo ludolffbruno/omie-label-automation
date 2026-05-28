@@ -74,7 +74,7 @@ def test_normalize_invoice_claro_rules(omie_client):
             "nQtdVol": 3
         },
         "informacoes_adicionais": {
-            "cObs": "PEDIDO COMPRA: PO-98765-XYZ | A/C: BRUNO LUDOLFF | ORDEM: ORD-321"
+            "cObs": "Inf. Contribuinte: PROCON RJ / PEDIDO 5500594041 / PROTOCOLO 0023623450 / A/C BRUNO LUDOLFF"
         },
         "pedido": {
             "cNumeroPedido": "999"
@@ -86,9 +86,10 @@ def test_normalize_invoice_claro_rules(omie_client):
     assert normalized.id_nfe == 1001
     assert normalized.cliente_nome == "CLARO DISTRIBUICAO S/A"
     assert normalized.template_name == "claro_dividida"
-    assert normalized.oc == "PO-98765-XYZ"
-    assert normalized.requisitante == "BRUNO LUDOLFF"
-    assert normalized.numero_ordem == "ORD-321"
+    assert normalized.oc == "5500594041"
+    assert normalized.requisitante == "MUCIO 2121-3885"
+    assert normalized.numero_ordem == "5500594041"
+    assert normalized.protocolo == "0023623450"
     assert normalized.quantidade_volumes == 3
 
 
@@ -124,7 +125,7 @@ def test_normalize_invoice_gsk_rules(omie_client):
     assert normalized.template_name == "gsk"
     assert normalized.oc == "GSK-776655"
     assert normalized.requisitante == "ANA SOUZA"
-    assert normalized.numero_ordem == "PED-GSK-99"  # Falls back to pedido_venda
+    assert normalized.numero_ordem == "GSK-776655"
     assert normalized.quantidade_volumes == 1  # 0 volume default fallback
 
 
@@ -186,10 +187,185 @@ def test_normalize_invoice_default_rules(omie_client):
     normalized = omie_client.normalize_invoice(raw_nfe)
     
     assert normalized.template_name == "default"
-    assert normalized.oc == "PED-OUTRO-55"  # Maps to pedido_venda
+    assert normalized.oc is None
     assert normalized.requisitante == "CARLOS SILVA"
-    assert normalized.numero_ordem == "PED-OUTRO-55"  # Maps to pedido_venda
+    assert normalized.numero_ordem is None
     assert normalized.quantidade_volumes == 1
+
+
+def test_normalize_invoice_extracts_oc_and_requester_without_omie_order(omie_client):
+    raw_nfe = {
+        "cabecalho": {
+            "nIdNfe": 1010,
+            "cNumero": "000010",
+            "cChaveNFe": "35260500000000000000550010000503391000001010",
+            "cStatus": "APROVADA",
+            "dEmis": "26/05/2026"
+        },
+        "destinatario": {
+            "cNome": "ESSILOR LAB RIO PRODUTOS OTICOS LTDA",
+            "cCNPJCPF": "12.345.678/0001-99",
+            "cUF": "RJ"
+        },
+        "transportadora": {},
+        "informacoes_adicionais": {
+            "cObs": "DADOS BANCARIOS / OC 636866/0 AC DE JEFERSON SILVA"
+        },
+        "pedido": {
+            "cNumeroPedido": "12862"
+        }
+    }
+
+    normalized = omie_client.normalize_invoice(raw_nfe)
+
+    assert normalized.oc == "636866"
+    assert normalized.numero_ordem == "636866"
+    assert normalized.requisitante == "JEFERSON SILVA"
+
+
+def test_label_field_extraction_ignores_omie_order_and_reads_danfe_text(omie_client):
+    fields = omie_client._extract_label_fields(
+        "INFORMACOES COMPLEMENTARES\nORDEM DE COMPRA 6602115510\n"
+        "PROTOCOLO DE AUTORIZACAO DE USO\n233260223225130 - 19/05/2026"
+    )
+
+    assert omie_client._standardize_pedido(fields, pedido_cliente="12862", pedido_venda="12794") == "6602115510"
+    assert fields.get("protocolo") is None
+
+
+def test_claro_protocol_does_not_capture_header_de(omie_client):
+    fields = omie_client._extract_label_fields(
+        "PROTOCOLO DE AUTORIZACAO DE USO\n233260223128888 - 19/05/2026\n"
+        "PEDIDO 5500596097/ PROTOCOLO 0023618220/ A/C MUCIO 2121-3885"
+    )
+
+    assert fields["numero_ordem"] == "5500596097"
+    assert fields["protocolo"] == "0023618220"
+
+
+def test_clean_extracted_value_rejects_preposition_de(omie_client):
+    assert omie_client._clean_extracted_value("DE") == ""
+
+
+def test_normalize_invoice_extracts_numero_do_pedido_as_pedido(omie_client):
+    raw_nfe = {
+        "cabecalho": {
+            "nIdNfe": 1012,
+            "cNumero": "000012",
+            "cChaveNFe": "35260500000000000000550010000503391000001012",
+            "cStatus": "APROVADA",
+            "dEmis": "26/05/2026"
+        },
+        "destinatario": {
+            "cNome": "CLIENTE PEDIDO LTDA",
+            "cCNPJCPF": "12.345.678/0001-99",
+            "cUF": "SP"
+        },
+        "transportadora": {},
+        "informacoes_adicionais": {
+            "cObs": "Texto complementar: Nº do pedido 998877 / SOLICITANTE: MARIA"
+        },
+        "pedido": {}
+    }
+
+    normalized = omie_client.normalize_invoice(raw_nfe)
+
+    assert normalized.numero_ordem == "998877"
+    assert normalized.oc == "998877"
+    assert normalized.requisitante == "MARIA"
+
+
+def test_normalize_invoice_recovers_uf_from_nested_destination(omie_client):
+    raw_nfe = {
+        "ide": {
+            "nNF": "000013",
+            "dEmi": "26/05/2026"
+        },
+        "compl": {
+            "nIdNF": 1013,
+            "cChaveNFe": "35260500000000000000550010000503391000001013"
+        },
+        "nfDestInt": {
+            "cRazao": "CLIENTE SEM UF DIRETA LTDA",
+            "cnpj_cpf": "12.345.678/0001-99"
+        },
+        "dest": {
+            "enderDest": {
+                "UF": "RJ"
+            }
+        },
+        "pedido": {},
+        "infAdic": {
+            "infCpl": "OC 12345"
+        }
+    }
+
+    normalized = omie_client.normalize_invoice(raw_nfe)
+
+    assert normalized.cliente_uf == "RJ"
+
+
+def test_friendly_model_conditions_match_without_exposing_regex(omie_client):
+    omie_client.rules["CLIENTE RJ"] = {
+        "name": "Cliente RJ",
+        "template": "gsk",
+        "conditions": [
+            {"field": "uf", "operator": "equals", "value": "RJ"}
+        ],
+        "mappings": {}
+    }
+    raw_nfe = {
+        "cabecalho": {
+            "nIdNfe": 1014,
+            "cNumero": "000014",
+            "cChaveNFe": "35260500000000000000550010000503391000001014",
+            "cStatus": "APROVADA",
+            "dEmis": "26/05/2026"
+        },
+        "destinatario": {
+            "cNome": "QUALQUER CLIENTE LTDA",
+            "cCNPJCPF": "12.345.678/0001-99",
+            "cUF": "RJ"
+        },
+        "transportadora": {},
+        "informacoes_adicionais": {},
+        "pedido": {}
+    }
+
+    normalized = omie_client.normalize_invoice(raw_nfe)
+
+    assert normalized.template_name == "gsk"
+
+
+def test_normalize_invoice_telmex_uses_claro_template_and_requester(omie_client):
+    raw_nfe = {
+        "cabecalho": {
+            "nIdNfe": 1011,
+            "cNumero": "000011",
+            "cChaveNFe": "35260500000000000000550010000503391000001011",
+            "cStatus": "APROVADA",
+            "dEmis": "26/05/2026"
+        },
+        "destinatario": {
+            "cNome": "TELMEX DO BRASIL S/A",
+            "cCNPJCPF": "40.432.548/0001-01",
+            "cUF": "RJ"
+        },
+        "transportadora": {},
+        "informacoes_adicionais": {
+            "cObs": "PEDIDO 5500594041 / PROTOCOLO 0023623450 / A/C OUTRA PESSOA"
+        },
+        "pedido": {
+            "cNumeroPedido": "12794"
+        }
+    }
+
+    normalized = omie_client.normalize_invoice(raw_nfe)
+
+    assert normalized.template_name == "claro_dividida"
+    assert normalized.numero_ordem == "5500594041"
+    assert normalized.protocolo == "0023623450"
+    assert normalized.requisitante == "MUCIO 2121-3885"
 
 
 def test_normalize_invoice_extracts_label_fields_from_nf_text(omie_client):
@@ -217,8 +393,8 @@ def test_normalize_invoice_extracts_label_fields_from_nf_text(omie_client):
     normalized = omie_client.normalize_invoice(raw_nfe)
 
     assert normalized.numero_ordem == "4500216102"
-    assert normalized.protocolo == "0023595237"
     assert normalized.requisitante == "LUCIANO SILVA"
+    assert normalized.protocolo is None
 
 
 def test_normalize_invoice_nfconsultar_shape(omie_client):
@@ -257,7 +433,7 @@ def test_normalize_invoice_nfconsultar_shape(omie_client):
     assert normalized.numero_nf == "000005"
     assert normalized.template_name == "claro_dividida"
     assert normalized.oc == "PO-123"
-    assert normalized.requisitante == "BRUNO LUDOLFF"
+    assert normalized.requisitante == "MUCIO 2121-3885"
     assert normalized.numero_ordem == "ORD-555"
     assert normalized.quantidade_volumes == 4
 
@@ -316,8 +492,44 @@ def test_list_nfes_uses_nfconsultar_payload(mock_post, omie_client):
     assert param["registros_por_pagina"] == 10
     assert param["filtrar_por_status"] == "N"
     assert param["dEmiInicial"] == "01/05/2026"
+    assert param["dEmiFinal"] == "01/05/2026"
+    assert param["tpNF"] == "1"
     assert "cStatus" not in param
     assert "dRegInicial" not in param
+
+
+@patch("httpx.Client.post")
+def test_obter_url_danfe_uses_notafiscalutil_geturldanfe(mock_post, omie_client):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"cUrlDanfe": "https%3A//example.com/danfe.pdf"}
+    mock_post.return_value = mock_response
+
+    inv = NormalizedInvoice(
+        id_nfe=123,
+        numero_nf="000123",
+        chave_nfe="",
+        cliente_nome="CLIENTE",
+        cliente_cnpj_cpf="",
+        cliente_uf="SP",
+        quantidade_volumes=1,
+        status="APROVADA",
+        data_emissao="20/05/2026",
+    )
+
+    assert omie_client.obter_url_danfe(inv) == "https://example.com/danfe.pdf"
+    payload = mock_post.call_args.kwargs["json"]
+    param = payload["param"][0]
+    assert payload["call"] == "GetUrlDanfe"
+    assert param == {"nCodNF": 123}
+    assert "cChaveNFe" not in param
+    assert "cNF" not in param
+
+
+def test_parse_redundant_wait_seconds(omie_client):
+    msg = "ERROR: Consumo redundante detectado. Aguarde 48 segundos para tentar novamente (REDUNDANT)."
+    assert omie_client.parse_redundant_wait_seconds(msg) == 48
+    assert omie_client.parse_redundant_wait_seconds("outro erro") is None
 
 
 @patch("httpx.Client.post")
@@ -350,7 +562,8 @@ def test_fetch_all_new_nfes_pagination(mock_post, omie_client):
         "listagemNfe": [
             {
                 "cabecalho": {"nIdNfe": 2001, "cNumero": "001", "cStatus": "APROVADA", "dEmis": "20/05/2026"},
-                "destinatario": {"cNome": "CLI1"}
+                "destinatario": {"cNome": "CLI1", "cUF": "SP"},
+                "informacoes_adicionais": {"cObs": "OC 1001"},
             }
         ]
     }
@@ -365,7 +578,8 @@ def test_fetch_all_new_nfes_pagination(mock_post, omie_client):
         "listagemNfe": [
             {
                 "cabecalho": {"nIdNfe": 2002, "cNumero": "002", "cStatus": "APROVADA", "dEmis": "20/05/2026"},
-                "destinatario": {"cNome": "CLI2"}
+                "destinatario": {"cNome": "CLI2", "cUF": "RJ"},
+                "informacoes_adicionais": {"cObs": "OC 1002"},
             }
         ]
     }
@@ -378,3 +592,33 @@ def test_fetch_all_new_nfes_pagination(mock_post, omie_client):
     assert invoices[0].id_nfe == 2001
     assert invoices[1].id_nfe == 2002
     assert mock_post.call_count == 2
+
+
+@patch("app.api.omie_client.OmieClient.consultar_nf")
+@patch("httpx.Client.post")
+def test_fetch_all_new_nfes_skips_incoming_before_detail(mock_post, mock_consultar, omie_client):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "total_de_paginas": 1,
+        "nfCadastro": [
+            {
+                "ide": {"nNF": "000111", "dEmi": "20/05/2026", "tpNF": "0"},
+                "compl": {"nIdNF": 111},
+                "nfDestInt": {"cRazao": "FORNECEDOR APPLE"},
+            },
+            {
+                "ide": {"nNF": "000222", "dEmi": "20/05/2026", "tpNF": "1"},
+                "compl": {"nIdNF": 222},
+                "nfDestInt": {"cRazao": "CLIENTE SA"},
+                "dest": {"enderDest": {"UF": "SP"}},
+                "infAdic": {"infCpl": "OC 222"},
+            },
+        ],
+    }
+    mock_post.return_value = mock_response
+
+    invoices = omie_client.fetch_all_new_nfes(start_date="20/05/2026")
+
+    assert [inv.id_nfe for inv in invoices] == [222]
+    mock_consultar.assert_not_called()

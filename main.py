@@ -9,6 +9,7 @@ from app.core.config import config
 from app.database.models import DatabaseManager, NormalizedInvoice
 from app.api.omie_client import OmieClient, OmieClientError
 from app.api.printer_service import PrinterService
+from app.api.dp_generator import DPGenerator
 from app.api.zpl_generator import ZPLGenerator
 
 
@@ -45,6 +46,12 @@ def main():
         type=str,
         metavar="PRINTER_NAME",
         help="Send a test ZPL label directly to the specified printer (use SIMULADO_ZEBRA_01 for simulation)."
+    )
+    parser.add_argument(
+        "--print-dp-barcode-test",
+        type=str,
+        metavar="PRINTER_NAME",
+        help="Send a minimal DP Code128 barcode test label to the specified printer."
     )
     parser.add_argument(
         "--ui",
@@ -122,6 +129,20 @@ def main():
             print("[ERRO] Falha ao enviar etiqueta de teste.")
             sys.exit(1)
 
+    if args.print_dp_barcode_test:
+        printer_name = args.print_dp_barcode_test
+        print(f"\n[IMPRESSAO] Enviando teste DP de barcode para: '{printer_name}'...")
+        label = DPGenerator.generate_barcode_test_label()
+        success = PrinterService.print_zpl(printer_name, label, "TESTE_BARCODE_DP")
+
+        if success:
+            print("[OK] Teste DP de barcode enviado com sucesso!")
+            if "SIMULADO" in printer_name.upper():
+                print("  (Arquivo DP salvo em temp_labels/ - modo simulado)")
+        else:
+            print("[ERRO] Falha ao enviar teste DP de barcode.")
+            sys.exit(1)
+
     # 3. Test Connection
     if args.test_connection:
         valid, msg = config.validate()
@@ -176,7 +197,7 @@ def main():
                 print(f"NF: {inv.numero_nf} | Client: {inv.cliente_nome} ({inv.cliente_uf})")
                 print(f"  Chave: {inv.chave_nfe}")
                 print(f"  Volumes: {inv.quantidade_volumes} | Template: {inv.template_name}")
-                print(f"  Pedido Venda: {inv.pedido_venda} | OC: {inv.oc or 'N/A'}")
+                print(f"  Pedido Omie: {inv.pedido_venda} | Pedido Cliente: {inv.pedido_cliente or 'N/A'} | OC: {inv.oc or 'N/A'}")
                 print(f"  Requisitante: {inv.requisitante or 'N/A'} | Ordem No: {inv.numero_ordem or 'N/A'}")
                 print(f"  Status: {inv.status} | Data: {inv.data_emissao}")
                 
@@ -193,8 +214,10 @@ def main():
 
 def _launch_ui():
     """Inicializa a interface grafica PySide6 com tema escuro premium."""
-    from PySide6.QtWidgets import QApplication
-    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication, QSplashScreen
+    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtGui import QPixmap, QPainter, QColor, QFont
+    import signal
     from app.ui.ui_main import MainWindow
     from app.ui.styles import STYLESHEET
 
@@ -205,8 +228,33 @@ def _launch_ui():
     app.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app.setStyleSheet(STYLESHEET)
 
+    pixmap = QPixmap(520, 260)
+    pixmap.fill(QColor("#0d1117"))
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(QColor("#58a6ff"))
+    title_font = QFont("Segoe UI", 26)
+    title_font.setBold(True)
+    painter.setFont(title_font)
+    painter.drawText(pixmap.rect().adjusted(0, 65, 0, 0), Qt.AlignHCenter | Qt.AlignTop, "Monitor de Etiquetas")
+    painter.setPen(QColor("#8b949e"))
+    subtitle_font = QFont("Segoe UI", 11)
+    painter.setFont(subtitle_font)
+    painter.drawText(pixmap.rect().adjusted(0, 128, 0, 0), Qt.AlignHCenter | Qt.AlignTop, "criado por Mr.Ludolff")
+    painter.end()
+
+    splash = QSplashScreen(pixmap)
+    splash.setWindowFlag(Qt.WindowStaysOnTopHint)
+    splash.show()
+    app.processEvents()
+
     window = MainWindow()
-    window.show()
+    signal.signal(signal.SIGINT, lambda *_: window.close())
+    signal.signal(signal.SIGTERM, lambda *_: window.close())
+    signal_timer = QTimer()
+    signal_timer.timeout.connect(lambda: None)
+    signal_timer.start(250)
+    QTimer.singleShot(1000, lambda: (splash.finish(window), window.show()))
 
     sys.exit(app.exec())
 

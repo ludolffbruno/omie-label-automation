@@ -19,6 +19,13 @@ config.json
 # ---- Etiquetas ZPL geradas (simulação) ----
 temp_labels/
 
+# ---- Amostras locais / dados de cliente ----
+.agents/
+scratch/
+Modelo nota fiscal/
+modelo notafiscal*
+*.pdf
+
 # ---- Logs ----
 logs/
 *.log

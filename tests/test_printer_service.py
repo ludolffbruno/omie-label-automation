@@ -38,6 +38,8 @@ def test_print_zpl_win32_success(monkeypatch):
          patch("win32print.WritePrinter") as mock_write, \
          patch("win32print.EndPagePrinter") as mock_end_page, \
          patch("win32print.EndDocPrinter") as mock_end_doc, \
+         patch("win32print.GetPrinter", return_value={}) as mock_get_printer, \
+         patch("win32print.GetJob", side_effect=Exception("Mock GetJob Exception")) as mock_get_job, \
          patch("win32print.ClosePrinter") as mock_close:
         
         result = PrinterService.print_zpl("Physical Zebra Printer", "^XA^FDPhysical Test^XZ", "test_phys")

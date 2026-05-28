@@ -39,21 +39,32 @@ class ZPLGenerator:
     def generate_batch(cls, invoices: List[NormalizedInvoice]) -> List[str]:
         """Gera ZPL para uma lista de NF-es, agrupando Claro em etiqueta dividida."""
         labels: List[str] = []
-        claro_buffer: List[NormalizedInvoice] = []
+        claro_buffer: List[tuple[NormalizedInvoice, int, int]] = []
+
+        def emit_claro_pair(allow_single: bool = False) -> None:
+            if len(claro_buffer) < 2 and not allow_single:
+                return
+            left_item = claro_buffer.pop(0)
+            right_item = claro_buffer.pop(0) if claro_buffer else None
+            left, left_vol, left_total = left_item
+            if right_item:
+                right, right_vol, right_total = right_item
+            else:
+                right, right_vol, right_total = None, 1, 1
+            labels.append(cls._generate_claro_pair_from_items(left, left_vol, left_total, right, right_vol, right_total))
 
         def flush_claro() -> None:
             while claro_buffer:
-                left = claro_buffer.pop(0)
-                right = claro_buffer.pop(0) if claro_buffer else None
-                labels.append(cls._generate_claro_pair(left, right))
+                emit_claro_pair(allow_single=True)
 
         for invoice in invoices:
-            if invoice.template_name in {"claro", "claro_dividida"}:
-                claro_buffer.append(invoice)
-                if len(claro_buffer) == 2:
-                    flush_claro()
+            if invoice.template_name in {"claro", "claro_dividida"} or cls._is_claro_invoice(invoice):
+                total_vols = invoice.quantidade_volumes or 1
+                for vol in range(1, total_vols + 1):
+                    claro_buffer.append((invoice, vol, total_vols))
+                while len(claro_buffer) >= 2:
+                    emit_claro_pair()
             else:
-                flush_claro()
                 labels.extend(cls.generate(invoice))
 
         flush_claro()
@@ -106,7 +117,7 @@ class ZPLGenerator:
             "^FO700,88^A0N,16,14^FD1- DEST^FS",
             "^FO806,58^GB42,62,2^FS",
             "^FO819,70^A0N,38,34^FD0^FS",
-            "^FO65,150^A0N,32,30^FDNº ORDEM^FS",
+            "^FO65,150^A0N,32,30^FDPEDIDO^FS",
             "^FO390,150^A0N,32,30^FDNF-e^FS",
             "^FO590,150^A0N,32,30^FDVOL^FS",
             "^FO740,150^A0N,32,30^FDUF^FS",
@@ -137,7 +148,25 @@ class ZPLGenerator:
         left_vol: int = 1,
         left_total: Optional[int] = None,
     ) -> str:
-        left_total = left_total or left.quantidade_volumes or 1
+        return cls._generate_claro_pair_from_items(
+            left,
+            left_vol,
+            left_total or left.quantidade_volumes or 1,
+            right,
+            1,
+            right.quantidade_volumes or 1 if right else 1,
+        )
+
+    @classmethod
+    def _generate_claro_pair_from_items(
+        cls,
+        left: NormalizedInvoice,
+        left_vol: int,
+        left_total: int,
+        right: Optional[NormalizedInvoice],
+        right_vol: int = 1,
+        right_total: int = 1,
+    ) -> str:
         zpl = cls._header()
         zpl += cls._claro_half(left, x=18, vol=left_vol, total_vols=left_total)
         zpl += [
@@ -161,7 +190,7 @@ class ZPLGenerator:
             "^FO438,505^GB1,4,1^FS",
         ]
         if right:
-            zpl += cls._claro_half(right, x=464, vol=1, total_vols=right.quantidade_volumes or 1)
+            zpl += cls._claro_half(right, x=464, vol=right_vol, total_vols=right_total)
         zpl += cls._footer()
         return "\n".join(zpl)
 
@@ -169,7 +198,7 @@ class ZPLGenerator:
     def _claro_half(cls, inv: NormalizedInvoice, x: int, vol: int, total_vols: int) -> List[str]:
         ordem = cls._order_number(inv)
         nf = cls._format_nf(inv.numero_nf)
-        protocolo = cls._sanitize(inv.protocolo or inv.oc or "")
+        protocolo = cls._sanitize(inv.protocolo or "")
         volume = f"{vol:02d}" if total_vols <= 1 else cls._format_volume(vol, total_vols)
         req = cls._requester(inv)
 
@@ -177,7 +206,7 @@ class ZPLGenerator:
             f"^FO{x + 78},25^A0N,56,52^FDP^FS",
             f"^FO{x + 16},92^A0N,32,30^FDPLATINUM^FS",
             f"^FO{x + 245},45^A0N,38,34^FDCLARO^FS",
-            f"^FO{x},160^A0N,31,29^FDNº ORDEM^FS",
+            f"^FO{x},160^A0N,31,29^FDPEDIDO^FS",
             f"^FO{x + 250},160^A0N,31,29^FDNF-e^FS",
             f"^FO{x},205^A0N,30,27^FD{ordem}^FS",
             f"^FO{x + 250},205^A0N,33,30^FD{nf}^FS",
@@ -199,33 +228,141 @@ class ZPLGenerator:
         volume = html.escape(cls._format_volume(vol, total))
         uf = html.escape(cls._sanitize(inv.cliente_uf)[:2])
         req = html.escape(cls._requester(inv))
+        is_claro = inv.template_name in {"claro", "claro_dividida"} or cls._is_claro_invoice(inv)
+        if is_claro:
+            return cls.preview_html_claro_pair(inv, None, vol, total)
+        barcode = html.escape(cls._barcode_value(inv))
         return f"""
-        <div style="width:880px;height:560px;background:#fff;color:#000;
-                    font-family:Arial,sans-serif;position:relative;border:1px solid #999;">
-          <div style="position:absolute;left:50px;top:38px;font-size:32px;">PLATINUM</div>
-          <div style="position:absolute;left:470px;top:25px;font-size:24px;">Cliente</div>
-          <div style="position:absolute;left:420px;top:60px;font-size:30px;font-weight:700;">{cliente}</div>
-          <div style="position:absolute;left:700px;top:25px;font-size:26px;">Entrega</div>
-          <div style="position:absolute;left:805px;top:58px;width:42px;height:62px;border:2px solid #000;
-                      font-size:34px;text-align:center;line-height:62px;">0</div>
-          <div style="position:absolute;left:65px;top:150px;font-size:30px;">Nº ORDEM</div>
-          <div style="position:absolute;left:390px;top:150px;font-size:30px;">NF-e</div>
-          <div style="position:absolute;left:590px;top:150px;font-size:30px;">VOL</div>
-          <div style="position:absolute;left:740px;top:150px;font-size:30px;">UF</div>
-          <div style="position:absolute;left:65px;top:190px;font-size:32px;font-weight:700;">{ordem}</div>
-          <div style="position:absolute;left:390px;top:188px;font-size:36px;font-weight:700;">{nf}</div>
-          <div style="position:absolute;left:590px;top:188px;font-size:36px;font-weight:700;">{volume}</div>
-          <div style="position:absolute;left:740px;top:188px;font-size:36px;font-weight:700;">{uf}</div>
-          <div style="position:absolute;left:65px;top:285px;font-size:30px;">REQUISITANTE</div>
-          <div style="position:absolute;left:85px;top:330px;font-size:26px;font-weight:700;">{req}</div>
-          <div style="position:absolute;left:65px;top:405px;width:750px;height:38px;border:1px solid #000;text-align:center;">.</div>
-          <div style="position:absolute;left:185px;top:468px;font-size:14px;">FAVOR CONFERIR O MATERIAL NO ATO DO RECEBIMENTO,</div>
-          <div style="position:absolute;left:165px;top:487px;font-size:14px;">NAO ACEITAREMOS RECLAMACOES OU DEVOLUCOES POSTERIORES.</div>
-          <div style="position:absolute;left:60px;top:522px;font-size:20px;font-weight:700;">
-            R. FRANCISCO EUGENIO 268 SALA 636, SAO CRISTOVAO RJ - TEL:21 3878-8855
-          </div>
-        </div>
+        <table width="768" cellspacing="0" cellpadding="0" style="background:#fff;color:#000;
+               font-family:Arial,sans-serif;border:2px solid #8a8a8a;margin:100px auto 70px auto;border-collapse:collapse;table-layout:fixed;">
+          <col width="64"><col width="64"><col width="64"><col width="64"><col width="64"><col width="64">
+          <col width="64"><col width="64"><col width="64"><col width="64"><col width="64"><col width="64">
+          <tr>
+            <td colspan="4" height="50" align="center" valign="middle"
+                style="border-right:2px solid #8a8a8a;font-size:24px;font-weight:700;">PLATINUM TI</td>
+            <td colspan="7" height="50" align="center" valign="middle"
+                style="border-right:2px solid #8a8a8a;overflow:hidden;">
+              <div style="font-size:10px;line-height:12px;">Cliente:</div>
+              <div style="font-size:20px;line-height:22px;font-weight:700;white-space:nowrap;overflow:hidden;">{cliente}</div>
+            </td>
+            <td colspan="1" height="50" align="center" valign="middle">
+              <span style="display:inline-block;border:1px solid #000;font-size:8px;line-height:9px;font-weight:700;">Entrega<br>0- EMIT<br>1- DEST</span>
+              <span style="display:inline-block;border:2px solid #000;font-size:24px;line-height:30px;font-weight:700;">0</span>
+            </td>
+          </tr>
+          <tr><td colspan="12" height="10" style="border-top:2px solid #8a8a8a;border-bottom:1px solid #b7b7b7;"></td></tr>
+          <tr>
+            <td colspan="3" height="50" valign="middle" style="padding-left:8px;border-bottom:2px solid #8a8a8a;">
+              <div style="font-size:11px;line-height:13px;">Nº ORDEM</div>
+              <div style="font-size:16px;line-height:18px;font-weight:700;">{ordem}</div>
+            </td>
+            <td colspan="4" height="50" valign="middle" style="border-bottom:2px solid #8a8a8a;">
+              <div style="font-size:11px;line-height:13px;">NF-e</div>
+              <div style="font-size:16px;line-height:18px;font-weight:700;">{nf}</div>
+            </td>
+            <td colspan="3" height="50" valign="middle" style="border-bottom:2px solid #8a8a8a;">
+              <div style="font-size:11px;line-height:13px;">VOL</div>
+              <div style="font-size:16px;line-height:18px;font-weight:700;">{volume}</div>
+            </td>
+            <td colspan="2" height="50" valign="middle" style="border-bottom:2px solid #8a8a8a;">
+              <div style="font-size:11px;line-height:13px;">UF</div>
+              <div style="font-size:16px;line-height:18px;font-weight:700;">{uf}</div>
+            </td>
+          </tr>
+          <tr><td colspan="12" height="14" style="border-bottom:1px solid #b7b7b7;"></td></tr>
+          <tr>
+            <td colspan="12" height="27" valign="middle" style="border-bottom:2px solid #8a8a8a;padding-left:8px;font-size:12px;font-weight:700;">
+              REQUISITANTE: {req or 'XXXXXXXX'}
+            </td>
+          </tr>
+          <tr>
+            <td colspan="12" height="42" valign="top" style="border-bottom:1px solid #b7b7b7;padding:6px 8px 0 8px;">
+              <div style="height:26px;border:1px solid #000;font-size:22px;line-height:25px;overflow:hidden;letter-spacing:1px;">
+                ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+              </div>
+            </td>
+          </tr>
+          <tr><td colspan="12" height="18" style="border-bottom:2px solid #8a8a8a;"></td></tr>
+          <tr>
+            <td colspan="12" height="29" align="center" valign="middle" style="font-size:10px;line-height:12px;">
+              FAVOR CONFERIR O MATERIAL NO ATO DO RECEBIMENTO.<br>
+              NAO ACEITAREMOS RECLAMACOES OU DEVOLUCOES POSTERIORES.
+            </td>
+          </tr>
+          <tr>
+            <td colspan="12" height="24" align="center" valign="middle" style="border-top:2px solid #8a8a8a;font-size:10px;font-weight:700;">
+              R. FRANCISCO EUGENIO 268 SALA 636, SAO CRISTOVAO RJ - TEL:21 3878-8855
+            </td>
+          </tr>
+        </table>
         """
+
+    @classmethod
+    def preview_html_claro_pair(
+        cls,
+        left: NormalizedInvoice,
+        right: Optional[NormalizedInvoice],
+        left_vol: int = 1,
+        left_total: Optional[int] = None,
+        right_vol: int = 1,
+        right_total: Optional[int] = None,
+    ) -> str:
+        left_total = left_total or left.quantidade_volumes or 1
+        right_total = right_total or (right.quantidade_volumes if right else 1) or 1
+        left_html = cls._preview_claro_half(left, "PLATINUM TI", left_vol, left_total)
+        right_html = cls._preview_claro_half(right, "PLATINUM TI", right_vol, right_total) if right else ""
+        return f"""
+        <table width="820" height="520" cellspacing="0" cellpadding="0" style="background:#fff;color:#000;
+               font-family:Arial,sans-serif;margin:34px auto;border-collapse:collapse;">
+          <tr>
+            <td width="409" valign="top">{left_html}</td>
+            <td width="2" bgcolor="#777"></td>
+            <td width="409" valign="top">{right_html}</td>
+          </tr>
+        </table>
+        """
+
+    @classmethod
+    def _preview_claro_half(cls, inv: Optional[NormalizedInvoice], title: str, vol: int, total: int) -> str:
+        if not inv:
+            return ""
+        ordem = html.escape(cls._order_number(inv))
+        nf = html.escape(cls._format_nf(inv.numero_nf))
+        volume = html.escape(f"{vol:02d}" if total <= 1 else cls._format_volume(vol, total))
+        protocolo = html.escape(cls._sanitize(inv.protocolo or "XXXXXXXXXX"))
+        req = html.escape(cls._sanitize(inv.requisitante or "MUCIO 2121-3885"))
+        title = html.escape(title)
+        return f"""
+        <table width="409" height="520" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+          <tr>
+            <td width="409" valign="top" style="padding:28px 20px 0 40px;">
+              <div style="font-size:34px;line-height:38px;font-weight:700;">{title}</div>
+              <div style="font-size:18px;line-height:19px;margin-top:12px;">Cliente:</div>
+              <div style="font-size:30px;line-height:33px;font-weight:700;">CLARO</div>
+              <div style="font-size:18px;line-height:19px;margin-top:32px;">Pedido:</div>
+              <div style="font-size:30px;line-height:33px;font-weight:700;">{ordem}</div>
+              <table width="320" cellspacing="0" cellpadding="0" style="margin-top:28px;border-collapse:collapse;">
+                <tr>
+                  <td width="72" style="font-size:19px;">NF-e:</td>
+                  <td width="104" style="font-size:25px;font-weight:700;">{nf}</td>
+                  <td width="60" style="font-size:19px;">VOL:</td>
+                  <td width="84" style="font-size:25px;font-weight:700;">{volume}</td>
+                </tr>
+              </table>
+              <div style="font-size:18px;line-height:19px;margin-top:32px;">Protocolo:</div>
+              <div style="font-size:25px;line-height:27px;font-weight:700;">{protocolo}</div>
+              <div style="font-size:18px;line-height:19px;margin-top:32px;">A/C:</div>
+              <div style="font-size:25px;line-height:27px;font-weight:700;">{req}</div>
+            </td>
+          </tr>
+        </table>
+        """
+
+    @staticmethod
+    def _is_claro_invoice(inv: NormalizedInvoice) -> bool:
+        text = f"{inv.cliente_nome or ''} {inv.cliente_cnpj_cpf or ''}".upper()
+        digits = re.sub(r"\D", "", inv.cliente_cnpj_cpf or "")
+        return "CLARO" in text or "TELMEX" in text or digits.startswith("40432548")
 
     @classmethod
     def _client_display(cls, inv: NormalizedInvoice) -> str:
@@ -243,13 +380,10 @@ class ZPLGenerator:
 
     @classmethod
     def _order_number(cls, inv: NormalizedInvoice) -> str:
-        return cls._sanitize(
-            inv.numero_ordem
-            or inv.oc
-            or inv.pedido_cliente
-            or inv.pedido_venda
-            or inv.numero_nf
-        )[:24]
+        val = inv.numero_ordem or inv.oc
+        if not val:
+            return "XXXXX"
+        return cls._sanitize(val)[:24]
 
     @classmethod
     def _requester(cls, inv: NormalizedInvoice) -> str:

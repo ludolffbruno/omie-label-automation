@@ -1,12 +1,15 @@
 import os
 import json
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(BASE_DIR / ".env")
 CONFIG_JSON_PATH = BASE_DIR / "config.json"
 
 class AppConfig:
@@ -17,11 +20,16 @@ class AppConfig:
         self.omie_api_url = os.getenv("OMIE_API_URL", "https://app.omie.com.br/api/v1/produtos/nfconsultar/")
         
         # User configurations (editable via UI/config.json)
-        self.polling_interval = 30
+        self.polling_interval = 240 # Tempo busca API OMIE
         self.auto_print = False
         self.printer_name = ""
         self.log_dir = "logs"
         self.db_path = "omie_automation.db"
+        # NOTA DE HARDWARE: A impressora Honeywell PC42t do cliente opera especificamente 
+        # com o modo Direct Protocol (DP) nativo (última opção configurada na interface).
+        # Por isso, use_gdi está fixado em False e use_dp está fixado em True.
+        self.use_gdi = False
+        self.use_dp = True
         
         # Load local overrides from config.json if they exist
         self.load_from_json()
@@ -36,6 +44,9 @@ class AppConfig:
                     self.printer_name = data.get("printer_name", self.printer_name)
                     self.log_dir = data.get("log_dir", self.log_dir)
                     self.db_path = data.get("db_path", self.db_path)
+                    # Força Direct Protocol (DP) nativo para compatibilidade com a impressora Honeywell PC42t
+                    self.use_gdi = False
+                    self.use_dp = True
             except Exception as e:
                 # Fallback to defaults if json is corrupt
                 print(f"Error loading config.json: {e}")
@@ -48,7 +59,9 @@ class AppConfig:
             "auto_print": self.auto_print,
             "printer_name": self.printer_name,
             "log_dir": self.log_dir,
-            "db_path": self.db_path
+            "db_path": self.db_path,
+            "use_gdi": False,  # Desativado por padrão para Honeywell PC42t
+            "use_dp": True     # Modo Direct Protocol (DP) nativo exigido pela impressora
         }
         try:
             with open(CONFIG_JSON_PATH, "w", encoding="utf-8") as f:

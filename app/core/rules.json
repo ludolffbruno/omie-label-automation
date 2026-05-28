@@ -1,65 +1,144 @@
 {
     "CLARO": {
+        "name": "Claro Dividida",
         "template": "claro_dividida",
+        "conditions": [
+            {
+                "field": "cliente",
+                "operator": "contains",
+                "value": "CLARO"
+            }
+        ],
         "mappings": {
             "oc": {
                 "source": "observacoes",
-                "regex": "(?:OC|PEDIDO COMPRA|ORDEM DE COMPRA):?\\s*([A-Za-z0-9\\-]+)"
+                "regex": "\\b(?:OC|O/C|ORDEM\\s+DE\\s+COMPRA|PEDIDO\\s+DE\\s+COMPRA|PEDIDO\\s+COMPRA|PEDIDO)\\b\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
             },
             "requisitante": {
                 "source": "observacoes",
-                "regex": "(?:A/C|REQUISITANTE|SOLICITANTE):?\\s*([^|\\n;]+)"
+                "regex": "(?:\\bA/C\\b|\\bAC\\s+DE\\b|\\bAOS\\s+CUIDADOS\\s+DE\\b|\\bREQUISITANTE\\b|\\bSOLICITANTE\\b)\\s*[:\\-\\s]?\\s*([^|\\n;]+)"
             },
             "numero_ordem": {
                 "source": "observacoes",
-                "regex": "(?:N[Ooº]\\s*ORDEM|ORDEM):?\\s*([A-Za-z0-9\\-]+)"
+                "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bPEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
+            }
+        }
+    },
+    "TELMEX": {
+        "name": "Claro Dividida",
+        "template": "claro_dividida",
+        "conditions": [
+            {
+                "field": "cliente",
+                "operator": "contains",
+                "value": "TELMEX"
+            }
+        ],
+        "mappings": {
+            "oc": {
+                "source": "observacoes",
+                "regex": "\\b(?:OC|O/C|ORDEM\\s+DE\\s+COMPRA|PEDIDO\\s+DE\\s+COMPRA|PEDIDO\\s+COMPRA|PEDIDO)\\b\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
+            },
+            "requisitante": {
+                "source": "observacoes",
+                "regex": "(?:\\bA/C\\b|\\bAC\\s+DE\\b|\\bAOS\\s+CUIDADOS\\s+DE\\b|\\bREQUISITANTE\\b|\\bSOLICITANTE\\b)\\s*[:\\-\\s]?\\s*([^|\\n;]+)"
+            },
+            "numero_ordem": {
+                "source": "observacoes",
+                "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bPEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
             }
         }
     },
     "GSK": {
+        "name": "GSK",
         "template": "gsk",
+        "conditions": [
+            {
+                "field": "cliente",
+                "operator": "contains",
+                "value": "GSK"
+            }
+        ],
         "mappings": {
             "oc": {
                 "source": "observacoes",
-                "regex": "(?:OC|GSK-OC):?\\s*([A-Za-z0-9\\-]+)"
+                "regex": "(?:OC|GSK-OC)\\s*[:\\-\\s]?\\s*([A-Za-z0-9.\\-]+)"
             },
             "requisitante": {
                 "source": "observacoes",
-                "regex": "(?:REQUISITANTE|SOLICITANTE):?\\s*([^|\\n;]+)"
+                "regex": "(?:REQUISITANTE|SOLICITANTE|A/C|AC\\s+DE)\\s*[:\\-\\s]?\\s*([^|\\n;]+)"
             },
             "numero_ordem": {
-                "source": "pedido_venda"
+                "source": "observacoes",
+                "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b|\\bPEDIDO\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
             }
         }
     },
     "GLAXOSMITHKLINE": {
+        "name": "GlaxoSmithKline",
         "template": "gsk",
+        "conditions": [
+            {
+                "field": "cliente",
+                "operator": "contains",
+                "value": "GLAXOSMITHKLINE"
+            }
+        ],
         "mappings": {
             "oc": {
                 "source": "observacoes",
-                "regex": "(?:OC|GSK-OC):?\\s*([A-Za-z0-9\\-]+)"
+                "regex": "(?:OC|GSK-OC)\\s*[:\\-\\s]?\\s*([A-Za-z0-9.\\-]+)"
             },
             "requisitante": {
                 "source": "observacoes",
-                "regex": "(?:REQUISITANTE|SOLICITANTE):?\\s*([^|\\n;]+)"
+                "regex": "(?:REQUISITANTE|SOLICITANTE|A/C|AC\\s+DE)\\s*[:\\-\\s]?\\s*([^|\\n;]+)"
             },
             "numero_ordem": {
-                "source": "pedido_venda"
+                "source": "observacoes",
+                "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b|\\bPEDIDO\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
             }
         }
     },
     "DEFAULT": {
+        "name": "Padrão 110x70",
         "template": "default",
         "mappings": {
             "oc": {
-                "source": "pedido_venda"
+                "source": "observacoes",
+                "regex": "\\b(?:OC|O/C|ORDEM\\s+DE\\s+COMPRA|PEDIDO\\s+DE\\s+COMPRA|PEDIDO\\s+COMPRA|PEDIDO|ORDEM)\\b\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
             },
             "requisitante": {
                 "source": "observacoes",
-                "regex": "(?:A/C|REQUISITANTE):?\\s*([^|\\n;]+)"
+                "regex": "(?:\\bA/C\\b|\\bAC\\s+DE\\b|\\bAOS\\s+CUIDADOS\\s+DE\\b|\\bREQUISITANTE\\b|\\bSOLICITANTE\\b)\\s*[:\\-\\s]?\\s*([^|\\n;]+)"
             },
             "numero_ordem": {
-                "source": "pedido_venda"
+                "source": "observacoes",
+                "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b|\\bPEDIDO\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
+            }
+        }
+    },
+    "AMSPEC": {
+        "name": "AMSPEC",
+        "template": "default",
+        "conditions": [
+            {
+                "field": "cliente",
+                "operator": "contains",
+                "value": "AMSPEC"
+            }
+        ],
+        "mappings": {
+            "oc": {
+                "source": "observacoes",
+                "regex": "\\b(?:OC|O/C|ORDEM\\s+DE\\s+COMPRA|PEDIDO\\s+DE\\s+COMPRA|PEDIDO\\s+COMPRA|PEDIDO)\\b\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
+            },
+            "requisitante": {
+                "source": "observacoes",
+                "regex": "(?:\\bA/C\\b|\\bAC\\s+DE\\b|\\bAOS\\s+CUIDADOS\\s+DE\\b|\\bREQUISITANTE\\b|\\bSOLICITANTE\\b)\\s*[:\\-\\s]?\\s*([^|\\n;]+)"
+            },
+            "numero_ordem": {
+                "source": "observacoes",
+                "regex": "(?:\\bN[º°O]?\\s*(?:DO\\s*)?PEDIDO\\b|\\bNUMERO\\s+(?:DO\\s*)?PEDIDO\\b|\\bN[º°O]?\\s*ORDEM\\b|\\bNUMERO\\s+DA\\s+ORDEM\\b|\\bNRO\\s*ORDEM\\b|\\bORDEM\\b|\\bPEDIDO\\b)\\s*[:=\\-\\s]?\\s*([A-Za-z0-9./\\-]+)"
             }
         }
     }
