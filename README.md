@@ -107,12 +107,9 @@ python main.py
 
 ## 📦 Gerar EXE
 
-Execute na raiz do projeto:
+Com o ambiente já configurado, execute na raiz do projeto:
 
 ```powershell
-.\.venv\Scripts\activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
 python -m PyInstaller --noconfirm --clean --windowed --name "OmieLabelAutomation" --add-data "app/core/rules.json;app/core" --hidden-import win32timezone main.py
 ```
 
